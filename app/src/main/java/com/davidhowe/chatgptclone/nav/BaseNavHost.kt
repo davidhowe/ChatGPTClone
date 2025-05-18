@@ -14,7 +14,7 @@ fun BaseNavHost(
     baseNavController: NavController,
 ) {
     val navHostController = baseNavController as NavHostController
-    NavHost(navController = navHostController, startDestination = NavDirections.textChat.route) {
+    NavHost(navController = navHostController, startDestination = NavDirections.speechChat.route) {
         composable(NavDirections.textChat.route) {
             TextChatScreen(
                 viewModel = hiltViewModel(), navHostController = navHostController
