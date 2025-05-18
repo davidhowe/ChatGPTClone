@@ -2,6 +2,7 @@ package com.davidhowe.chatgptclone
 
 import com.davidhowe.chatgptclone.data.local.ChatDomain
 import com.davidhowe.chatgptclone.data.local.ChatSummaryDomain
+import kotlin.math.sin
 
 object SampleData {
     val sampleDataNavListChats = listOf(
