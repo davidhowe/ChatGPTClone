@@ -1,20 +1,39 @@
 package com.davidhowe.chatgptclone
 
-import com.davidhowe.chatgptclone.data.local.ChatSummary
+import com.davidhowe.chatgptclone.data.local.ChatDomain
+import com.davidhowe.chatgptclone.data.local.ChatSummaryDomain
 
 object SampleData {
     val sampleDataNavListChats = listOf(
-        ChatSummary.build(
-            "First Chat",
-            "This is the first chat"
+        ChatSummaryDomain.build(
+            ChatDomain(
+                uuid = "1",
+                title = "First Chat",
+                summary = "This is the first chat",
+                messages = emptyList(),
+                createdAt = 0L,
+                lastModifiedAt = 0L
+            )
         ),
-        ChatSummary.build(
-            "Second Chat",
-            "This is the second chat"
+        ChatSummaryDomain.build(
+            ChatDomain(
+                uuid = "2",
+                title = "Second Chat",
+                summary = "This is the second chat",
+                messages = emptyList(),
+                createdAt = 2L,
+                lastModifiedAt = 2L
+            )
         ),
-        ChatSummary.build(
-            "Third Chat",
-            "This is the third chat"
+        ChatSummaryDomain.build(
+            ChatDomain(
+                uuid = "3",
+                title = "Third Chat",
+                summary = "This is the third chat",
+                messages = emptyList(),
+                createdAt = 3L,
+                lastModifiedAt = 3L
+            )
         ),
     )
 }

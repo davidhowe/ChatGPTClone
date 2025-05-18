@@ -40,7 +40,7 @@ fun TextChatScreenContent(
             // todo handle new chat requested
         },
         onChatClicked = {
-            Timber.d("onChatClicked, id: ${it.id}")
+            Timber.d("onChatClicked, id: ${it.uuid}")
             // todo handle chat click
         },
         onSearchTextChanged = {

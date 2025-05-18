@@ -36,7 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.davidhowe.chatgptclone.data.local.ChatSummary
+import com.davidhowe.chatgptclone.data.local.ChatSummaryDomain
 import com.davidhowe.chatgptclone.util.StringFunction
 import com.davidhowe.chatgptclone.util.VoidFunction
 import kotlinx.coroutines.launch
@@ -48,8 +48,8 @@ fun TextChatNavDrawer(
     title: String,
     onNewChatClicked: VoidFunction,
     onSearchTextChanged: StringFunction,
-    onChatClicked: (ChatSummary) -> Unit,
-    chatList: List<ChatSummary>,
+    onChatClicked: (ChatSummaryDomain) -> Unit,
+    chatList: List<ChatSummaryDomain>,
     content: @Composable (PaddingValues) -> Unit,
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -138,7 +138,7 @@ fun TextChatNavDrawer(
                                 style = MaterialTheme.typography.titleMedium
                             )
                             Text(
-                                text = chatList[index].body,
+                                text = chatList[index].content,
                                 style = MaterialTheme.typography.bodyMedium
                             )
                         }
