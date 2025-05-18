@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">ChatGPTClone</string>
+    <string name="chat_empty_message">How can I help you?</string>
 </resources>
