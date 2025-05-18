@@ -6,8 +6,8 @@ import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import com.davidhowe.chatgptclone.ui.speechChat.SpeechChatScreen
-import com.davidhowe.chatgptclone.ui.textChat.TextChatScreen
+import com.davidhowe.chatgptclone.ui.speechchat.SpeechChatScreen
+import com.davidhowe.chatgptclone.ui.textchat.TextChatScreen
 
 @Composable
 fun BaseNavHost(

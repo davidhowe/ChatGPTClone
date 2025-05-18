@@ -13,7 +13,7 @@ class ChatGPTCloneApplication : Application() {
         super.onCreate()
         if (BuildConfig.DEBUG && Timber.treeCount == 0) {
             plant(DebugTree())
-        } // todo release logs for analytics
+        }
 
     }
 }

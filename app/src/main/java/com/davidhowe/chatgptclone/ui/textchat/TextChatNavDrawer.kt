@@ -1,4 +1,4 @@
-package com.davidhowe.chatgptclone.ui.textChat
+package com.davidhowe.chatgptclone.ui.textchat
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -107,7 +107,7 @@ fun TextChatNavDrawer(
                             }) { // Clear text on click
                             Icon(
                                 Icons.Filled.Create,
-                                contentDescription = "Clear search"
+                                contentDescription = "Create chat"
                             )
                         }
                     }

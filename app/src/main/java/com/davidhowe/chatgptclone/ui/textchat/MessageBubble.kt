@@ -1,4 +1,4 @@
-package com.davidhowe.chatgptclone.ui.textChat
+package com.davidhowe.chatgptclone.ui.textchat
 
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing

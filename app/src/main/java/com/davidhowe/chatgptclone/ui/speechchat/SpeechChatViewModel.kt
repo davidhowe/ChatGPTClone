@@ -1,4 +1,4 @@
-package com.davidhowe.chatgptclone.ui.speechChat
+package com.davidhowe.chatgptclone.ui.speechchat
 
 import androidx.lifecycle.ViewModel
 import com.davidhowe.chatgptclone.util.ResourceUtil

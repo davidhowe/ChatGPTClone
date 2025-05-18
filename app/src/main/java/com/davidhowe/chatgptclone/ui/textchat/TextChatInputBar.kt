@@ -1,4 +1,4 @@
-package com.davidhowe.chatgptclone.ui.textChat
+package com.davidhowe.chatgptclone.ui.textchat
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border

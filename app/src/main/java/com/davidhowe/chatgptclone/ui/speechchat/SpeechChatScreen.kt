@@ -1,14 +1,13 @@
-package com.davidhowe.chatgptclone.ui.speechChat
+package com.davidhowe.chatgptclone.ui.speechchat
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.navigation.NavHostController
-import com.davidhowe.chatgptclone.ui.textChat.TextChatViewModel
 
 
 @Composable
 fun SpeechChatScreen(
-    viewModel: TextChatViewModel,
+    viewModel: SpeechChatViewModel,
     navHostController: NavHostController,
 ) {
     SpeechChatScreenContent()

@@ -1,4 +1,4 @@
-package com.davidhowe.chatgptclone.ui.textChat
+package com.davidhowe.chatgptclone.ui.textchat
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
@@ -61,9 +61,11 @@ fun TextChatScreenContent(
     var messageScrollToggle by remember { mutableStateOf(false) }
 
     LaunchedEffect(messages.size, isProcessing, messageScrollToggle) {
-        listState.animateScrollToItem(
-            index = messages.lastIndex,
-        )
+        if (messages.isNotEmpty()) {
+            listState.animateScrollToItem(
+                index = messages.lastIndex,
+            )
+        }
     }
 
     TextChatNavDrawer(
