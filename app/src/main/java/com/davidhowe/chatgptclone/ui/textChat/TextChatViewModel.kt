@@ -2,9 +2,10 @@ package com.davidhowe.chatgptclone.ui.textChat
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.davidhowe.chatgptclone.SampleData.sampleDataNavListChats
 import com.davidhowe.chatgptclone.data.datasource.ChatLocalDataSource
 import com.davidhowe.chatgptclone.data.datasource.MessageLocalDataSource
-import com.davidhowe.chatgptclone.data.local.ChatDomain
+import com.davidhowe.chatgptclone.data.local.ChatMessageDomain
 import com.davidhowe.chatgptclone.data.local.ChatSummaryDomain
 import com.davidhowe.chatgptclone.data.room.ChatEntity
 import com.davidhowe.chatgptclone.di.IoDispatcher
@@ -21,7 +22,8 @@ import javax.inject.Inject
 
 data class TextChatUiState(
     val title: String = "",
-    val activeChat: ChatDomain? = null
+    val messages: List<ChatMessageDomain> = emptyList(),
+    val isProcessing: Boolean = false,
 )
 
 data class TextChatNavDrawerUiState(
@@ -40,7 +42,11 @@ class TextChatViewModel @Inject constructor(
     private val _uiStateMain = MutableStateFlow(TextChatUiState())
     val uiStateMain: StateFlow<TextChatUiState> = _uiStateMain.asStateFlow()
 
-    private val _uiStateNav = MutableStateFlow(TextChatNavDrawerUiState())
+    private val _uiStateNav = MutableStateFlow(
+        TextChatNavDrawerUiState(
+            summaryList = sampleDataNavListChats
+        )
+    )
     val uiStateNav: StateFlow<TextChatNavDrawerUiState> = _uiStateNav.asStateFlow()
 
     init {
@@ -58,6 +64,36 @@ class TextChatViewModel @Inject constructor(
                 Timber.d("Chat title: ${it.title}")
             }
         }
+    }
+
+    fun onClickSend(text: String) {
+        viewModelScope.launch(ioDispatcher) {
+            // Simulate user send
+            _uiStateMain.value = _uiStateMain.value.copy(
+                messages = _uiStateMain.value.messages + ChatMessageDomain(
+                    uuid = "",
+                    createdAt = System.currentTimeMillis(),
+                    isFromUser = true,
+                    content = text,
+                ),
+                isProcessing = true
+            )
+            delay(5000)
+            // Simulate system send
+            _uiStateMain.value = _uiStateMain.value.copy(
+                messages = _uiStateMain.value.messages + ChatMessageDomain(
+                    uuid = "",
+                    createdAt = System.currentTimeMillis(),
+                    isFromUser = false,
+                    content = "System response: ${System.currentTimeMillis()}",
+                ),
+                isProcessing = false
+            )
+        }
+    }
+
+    fun orderMessages() {
+
     }
 
 
