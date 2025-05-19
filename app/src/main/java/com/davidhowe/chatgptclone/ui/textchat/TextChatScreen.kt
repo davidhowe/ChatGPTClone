@@ -1,5 +1,8 @@
 package com.davidhowe.chatgptclone.ui.textchat
 
+import android.Manifest
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -20,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -29,6 +33,8 @@ import androidx.navigation.NavHostController
 import com.davidhowe.chatgptclone.R
 import com.davidhowe.chatgptclone.data.local.ChatMessageDomain
 import com.davidhowe.chatgptclone.data.local.ChatSummaryDomain
+import com.davidhowe.chatgptclone.nav.NavDirections
+import com.davidhowe.chatgptclone.ui.speechchat.SpeechChatEvent
 import com.davidhowe.chatgptclone.util.StringFunction
 import com.davidhowe.chatgptclone.util.VoidFunction
 import kotlinx.coroutines.delay
@@ -43,6 +49,33 @@ fun TextChatScreen(
     val uiStateNav by viewModel.uiStateNav.collectAsStateWithLifecycle()
     val uiStateProcessedMessage by viewModel.processedMessage.collectAsStateWithLifecycle()
 
+    val context = LocalContext.current
+
+    LaunchedEffect(Unit) {
+        viewModel.eventFlow.collect { event ->
+            when (event) {
+                is TextChatEvent.ShowToast -> {
+                    Toast.makeText(context, event.message, Toast.LENGTH_SHORT).show()
+                }
+
+                TextChatEvent.NavigateBack -> {
+                    navHostController.navigateUp()
+                }
+
+                TextChatEvent.NavigateToSpeech -> {
+                    Timber.d("is TextChatEvent.NavigateToSpeech")
+                    navHostController.navigate(
+                        route = NavDirections.speechChat.route,
+                        builder = {
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    )
+                }
+            }
+        }
+    }
+
     TextChatScreenContent(
         titleText = uiStateMain.title,
         messages = uiStateMain.messages,
@@ -53,7 +86,12 @@ fun TextChatScreen(
         onNewChatClicked = viewModel::onNewChatClicked,
         onChatClicked = viewModel::onChatClicked,
         onSearchTextChanged = viewModel::onSearchTextChanged,
+        onSpeechClick = viewModel::onSpeechClick,
     )
+
+    BackHandler {
+        Timber.d("On back pressed TextChatScreen")
+    }
 }
 
 @Composable
@@ -67,6 +105,7 @@ fun TextChatScreenContent(
     onNewChatClicked: VoidFunction,
     onChatClicked: (ChatSummaryDomain) -> Unit,
     onSearchTextChanged: StringFunction,
+    onSpeechClick: VoidFunction
 ) {
     val keyboardController = LocalSoftwareKeyboardController.current
     val listState = rememberLazyListState()
@@ -163,7 +202,9 @@ fun TextChatScreenContent(
                             keyboardController?.hide()
                         }
                     },
-                    onSpeechClick = {},
+                    onSpeechClick = {
+                        onSpeechClick.invoke()
+                    },
                 )
             }
         }

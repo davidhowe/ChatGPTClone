@@ -3,18 +3,27 @@ package com.davidhowe.chatgptclone.ui.speechchat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.davidhowe.chatgptclone.SpeechChatState
+import com.davidhowe.chatgptclone.data.preferences.GptClonePreferences
 import com.davidhowe.chatgptclone.di.IoDispatcher
+import com.davidhowe.chatgptclone.domain.usecase.ChatUseCases
 import com.davidhowe.chatgptclone.util.ResourceUtil
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.PermissionStatus
+import com.google.accompanist.permissions.shouldShowRationale
+import com.google.firebase.vertexai.Chat
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import javax.inject.Inject
 import kotlin.math.PI
-import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.pow
 import kotlin.math.sin
@@ -24,50 +33,94 @@ data class SpeechChatUiState(
     val chatState: SpeechChatState = SpeechChatState.aiResponding,
 )
 
+sealed class SpeechChatEvent {
+    object RequestAudioRecordPermission : SpeechChatEvent()
+    object NavigateBack : SpeechChatEvent()
+    data class ShowToast(val message: String) : SpeechChatEvent()
+}
+
+@OptIn(ExperimentalPermissionsApi::class)
 @HiltViewModel
 class SpeechChatViewModel @Inject constructor(
     private val resourceUtil: ResourceUtil,
+    private val preferences: GptClonePreferences,
+    private val chatUseCases: ChatUseCases,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SpeechChatUiState())
     val uiState: StateFlow<SpeechChatUiState> = _uiState.asStateFlow()
 
-    private val _aiVolumeLevel = MutableStateFlow(0f) // Seperate from uiState so we dont trigger recomposition
+    private val _eventFlow = MutableSharedFlow<SpeechChatEvent>()
+    val eventFlow = _eventFlow.asSharedFlow()
+
+    private val _aiVolumeLevel =
+        MutableStateFlow(0f) // Seperate from uiState so we dont trigger unnecessary recomposition
     val aiVolumeLevel: StateFlow<Float> = _aiVolumeLevel
 
+    private var activeChat: Chat? = null
+    private var activeChatUUID: String? = null
+
+    private var streamJob: Job? = null
+
     init {
-        _uiState.value = SpeechChatUiState()
         viewModelScope.launch(ioDispatcher) {
-            repeat(50) {
-                _uiState.value = _uiState.value.copy(
-                    chatState = SpeechChatState.userTalking
+            activeChatUUID = preferences.getActiveChatUUID().ifBlank { null }
+
+            updateState {
+                copy(
+                    chatState = SpeechChatState.idle,
                 )
-                startSimulatedVolumeLevels(_aiVolumeLevel, 5000L)
-                _uiState.value = _uiState.value.copy(
-                    chatState = SpeechChatState.aiResponding
-                )
-                startSimulatedVolumeLevels(_aiVolumeLevel, 5000L)
-                _uiState.value = _uiState.value.copy(
-                    chatState = SpeechChatState.idle
-                )
-                startSimulatedVolumeLevels(_aiVolumeLevel, 5000L)
-                _uiState.value = _uiState.value.copy(
-                    chatState = SpeechChatState.userTalking
-                )
+            }
+
+            activeChat = if (activeChatUUID.isNullOrBlank()) {
+                chatUseCases.startChat()
+            } else {
+                chatUseCases.startChat(activeChatUUID!!)
+            }
+
+            if (activeChat == null) {
+                // todo show user error
             }
         }
     }
 
-    /*suspend fun startSimulatedVolumeLevels() {
-        val random = Random(System.currentTimeMillis())
-
-        repeat(400) { i ->
-            val voicePulse = abs(sin(i / 6f)) * random.nextFloat()
-            _aiVolumeLevel.value = voicePulse.coerceIn(0f, 1f)
-            delay(30L) // ~33 FPS
+    fun onNoAudioRecordPermission() {
+        viewModelScope.launch(ioDispatcher) {
+            delay(1000)
+            _eventFlow.emit(SpeechChatEvent.RequestAudioRecordPermission)
         }
-    }*/
+    }
+
+    fun onPermissionRequestResult(
+        permissionName: String,
+        isGranted: Boolean,
+        permissionStatus: PermissionStatus
+    ) {
+        Timber.d(
+            "onPermissionRequestResult: $permissionName, isGranted: $isGranted, shouldShowRationale: ${permissionStatus.shouldShowRationale}"
+        )
+        if (isGranted == false && permissionStatus.shouldShowRationale == false) {
+            // We cant continue here anymore
+            viewModelScope.launch {
+                _eventFlow.emit(SpeechChatEvent.ShowToast("Enable $permissionName permission in settings"))
+                _eventFlow.emit(SpeechChatEvent.NavigateBack)
+            }
+        } else if (isGranted == false && permissionStatus.shouldShowRationale == true) {
+            // TODO Show permission rationale
+            viewModelScope.launch {
+                _eventFlow.emit(SpeechChatEvent.RequestAudioRecordPermission)
+            }
+        } else if (isGranted == true) {
+            viewModelScope.launch {
+                _eventFlow.emit(SpeechChatEvent.ShowToast("Permission Granted!"))
+            }
+        }
+    }
+
+    private inline fun updateState(update: SpeechChatUiState.() -> SpeechChatUiState) {
+        _uiState.value = _uiState.value.update()
+    }
 
 
     /**
@@ -116,11 +169,15 @@ class SpeechChatViewModel @Inject constructor(
                 else -> 0.02f // High to silence
             }
             val transitionFactor = if (isTransitioning) {
-                ((phaseProgress - (1f - transitionDuration / phaseDuration)) * phaseDuration / transitionDuration).coerceIn(0f, 1f)
+                ((phaseProgress - (1f - transitionDuration / phaseDuration)) * phaseDuration / transitionDuration).coerceIn(
+                    0f,
+                    1f
+                )
             } else {
                 0f
             }
-            val effectiveBaseVolume = baseVolume * (1f - transitionFactor) + nextPhaseVolume * transitionFactor
+            val effectiveBaseVolume =
+                baseVolume * (1f - transitionFactor) + nextPhaseVolume * transitionFactor
 
             // Speech-like dynamics for noise phases
             var voicePulse = effectiveBaseVolume
@@ -140,8 +197,9 @@ class SpeechChatViewModel @Inject constructor(
                 val randomVariation = (random.nextFloat() * 0.1f - 0.05f) * 0.2f
 
                 // Combine and scale to phase range
-                voicePulse = (effectiveBaseVolume + (phraseWave + syllableWave + burstEnvelope + randomVariation) * volumeScale)
-                    .coerceIn(0f, 1f)
+                voicePulse =
+                    (effectiveBaseVolume + (phraseWave + syllableWave + burstEnvelope + randomVariation) * volumeScale)
+                        .coerceIn(0f, 1f)
             }
 
             // Smooth with previous value
@@ -156,64 +214,3 @@ class SpeechChatViewModel @Inject constructor(
 
 
 }
-
-/*
-fun drawYarnBallMorph(
-    drawScope: DrawScope,
-    morphProgress: Float,
-    volume: Float,
-    frameTimeMillis: Long
-) = with(drawScope) {
-    val center = size.center
-    val minRadius = size.minDimension / 4.5f
-    val maxRadius = size.minDimension / 2.2f
-    val baseRadius = lerp(minRadius, maxRadius, volume)
-    val colors = listOf(
-        Color(0xFF8E24AA), Color(0xFFBA68C8),
-        Color(0xFFCE93D8), Color(0xFFD1C4E9)
-    )
-    val spacing = lerp(15f, 30f, volume)
-    val segments = 100
-
-    // Volume-driven dynamics
-    val wobbleMultiplier = 1f//lerp(0.5f, 1.5f, volume) // how big the wobble grows
-    val spinSpeed = lerp(0.5f, 9f, volume)          // how fast the rings spin
-
-    val time = frameTimeMillis / 300f * spinSpeed
-
-    colors.forEachIndexed { i, color ->
-        val radius = baseRadius - (i * spacing)
-        val angleOffset = time + i * 30f
-        val path = Path()
-
-        for (j in 0..segments) {
-            val theta = j / segments.toDouble() * 2 * PI
-
-            val wobble = sin(theta * (4 + i) + angleOffset) * (4 + i) * wobbleMultiplier
-            val effectiveRadius = radius + wobble.toFloat()
-
-            val xBall = center.x + cos(theta) * effectiveRadius
-            val yBall = center.y + sin(theta) * effectiveRadius
-
-            val t = j / segments.toFloat()
-            val xFlat = size.width * t
-            val yFlat = center.y
-
-            val x = lerp(xBall.toFloat(), xFlat, morphProgress)
-            val y = lerp(yBall.toFloat(), yFlat, morphProgress)
-
-            if (j == 0) path.moveTo(x, y)
-            else path.lineTo(x, y)
-        }
-
-        val strokeWidth = lerp(2.5f + i * 0.4f, 0f, morphProgress)
-        if (strokeWidth > 0.3f) {
-            drawPath(
-                path,
-                color = color,
-                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
-            )
-        }
-    }
-}
- */

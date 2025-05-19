@@ -1,4 +1,5 @@
 [versions]
+accompanistPermissions = "0.31.0-alpha"
 agp = "8.10.0"
 composeMarkdown = "0.5.7"
 kotlin = "2.1.20"
@@ -22,6 +23,7 @@ firebase-bom = "33.13.0"
 androidxAnimationCompose = "1.8.1"
 
 [libraries]
+accompanist-permissions = { module = "com.google.accompanist:accompanist-permissions", version.ref = "accompanistPermissions" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 compose-markdown = { module = "com.github.jeziellago:compose-markdown", version.ref = "composeMarkdown" }
 firebase-analytics = { module = "com.google.firebase:firebase-analytics" }

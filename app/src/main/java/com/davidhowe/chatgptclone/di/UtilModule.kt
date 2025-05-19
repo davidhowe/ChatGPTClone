@@ -1,8 +1,10 @@
 package com.davidhowe.chatgptclone.di
 
 import android.content.Context
+import android.content.SharedPreferences
 import com.davidhowe.chatgptclone.AIConfigModel
 import com.davidhowe.chatgptclone.AIConfigTemp
+import com.davidhowe.chatgptclone.data.preferences.GptClonePreferences
 import com.davidhowe.chatgptclone.util.DeviceUtil
 import com.davidhowe.chatgptclone.util.ResourceUtil
 import com.google.firebase.Firebase
@@ -50,5 +52,17 @@ object UtilModule {
                 )
             )
         )
+    }
+
+    @Singleton
+    @Provides
+    fun provideSharedPreferences(@ApplicationContext appContext: Context): SharedPreferences {
+        return appContext.getSharedPreferences("gpt_clone_prefs", Context.MODE_PRIVATE)
+    }
+
+    @Singleton
+    @Provides
+    fun provideGptClonePreferences(sharedPrefs: SharedPreferences): GptClonePreferences {
+        return GptClonePreferences(sharedPrefs)
     }
 }

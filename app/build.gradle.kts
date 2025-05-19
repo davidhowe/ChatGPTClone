@@ -63,6 +63,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.savedstate)
     implementation(libs.androidx.lifecycle.viewModelCompose)
     implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.accompanist.permissions)
 
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.analytics)

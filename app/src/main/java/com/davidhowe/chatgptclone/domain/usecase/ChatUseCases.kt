@@ -17,7 +17,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class TextChatUseCases @Inject constructor(
+class ChatUseCases @Inject constructor(
     // TODO: Refactor this into individual use cases as app expands
     private val generativeModel: GenerativeModel,
     private val chatLocalDataSource: ChatLocalDataSource,

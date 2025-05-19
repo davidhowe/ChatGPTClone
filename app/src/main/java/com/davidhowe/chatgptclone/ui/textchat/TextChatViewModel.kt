@@ -4,16 +4,19 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.davidhowe.chatgptclone.data.local.ChatMessageDomain
 import com.davidhowe.chatgptclone.data.local.ChatSummaryDomain
+import com.davidhowe.chatgptclone.data.preferences.GptClonePreferences
 import com.davidhowe.chatgptclone.di.IoDispatcher
-import com.davidhowe.chatgptclone.domain.usecase.TextChatUseCases
+import com.davidhowe.chatgptclone.domain.usecase.ChatUseCases
 import com.davidhowe.chatgptclone.util.ResourceUtil
 import com.google.firebase.vertexai.Chat
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -30,9 +33,16 @@ data class TextChatNavDrawerUiState(
     val summaryList: List<ChatSummaryDomain> = emptyList(),
 )
 
+sealed class TextChatEvent {
+    object NavigateToSpeech : TextChatEvent()
+    object NavigateBack : TextChatEvent()
+    data class ShowToast(val message: String) : TextChatEvent()
+}
+
 @HiltViewModel
 class TextChatViewModel @Inject constructor(
-    private val textChatUseCases: TextChatUseCases,
+    private val chatUseCases: ChatUseCases,
+    private val preferences: GptClonePreferences,
     private val resourceUtil: ResourceUtil,
 
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher
@@ -47,6 +57,9 @@ class TextChatViewModel @Inject constructor(
         )
     )
     val uiStateNav: StateFlow<TextChatNavDrawerUiState> = _uiStateNav.asStateFlow()
+
+    private val _eventFlow = MutableSharedFlow<TextChatEvent>()
+    val eventFlow = _eventFlow.asSharedFlow()
 
     private val _processedMessage = MutableStateFlow<String>("")
     val processedMessage = _processedMessage.asStateFlow()
@@ -63,6 +76,12 @@ class TextChatViewModel @Inject constructor(
         }
     }
 
+    override fun onCleared() {
+        Timber.d("onCleared")
+        super.onCleared()
+        streamJob?.cancel()
+    }
+
     fun onNewChatClicked() {
         Timber.d("onNewChatClicked")
         viewModelScope.launch(ioDispatcher) {
@@ -77,7 +96,7 @@ class TextChatViewModel @Inject constructor(
                     isProcessing = false
                 )
             }
-            activeChat = textChatUseCases.startChat()
+            activeChat = chatUseCases.startChat()
             if (activeChat == null) {
                 // todo error message
             }
@@ -93,11 +112,11 @@ class TextChatViewModel @Inject constructor(
             updateState {
                 copy(
                     title = chat.title,
-                    messages = textChatUseCases.getMessagesForChat(chat.uuid),
+                    messages = chatUseCases.getMessagesForChat(chat.uuid),
                     isProcessing = true
                 )
             }
-            activeChat = textChatUseCases.startChat(chat.uuid)
+            activeChat = chatUseCases.startChat(chat.uuid)
             delay(500)
             if (activeChat != null) {
                 updateState {
@@ -134,12 +153,12 @@ class TextChatViewModel @Inject constructor(
             }
 
             if (activeChatUUID == null) {
-                activeChatUUID = textChatUseCases.storeNewChat()
+                activeChatUUID = chatUseCases.storeNewChat()
                 if (activeChatUUID == null) {
                     // todo handle error storing chat
                     return@launch
                 }
-                val title = textChatUseCases.generateChatTitle(
+                val title = chatUseCases.generateChatTitle(
                     chatUUID = activeChatUUID!!,
                     firstMessage = text
                 )
@@ -149,7 +168,7 @@ class TextChatViewModel @Inject constructor(
                     )
                 }
                 refreshChatHistories()
-                activeChat = textChatUseCases.startChat()
+                activeChat = chatUseCases.startChat()
             }
 
             if (activeChat == null || activeChatUUID == null) {
@@ -157,7 +176,7 @@ class TextChatViewModel @Inject constructor(
                 return@launch
             }
 
-            textChatUseCases.storeNewMessage(
+            chatUseCases.storeNewMessage(
                 chatUUID = activeChatUUID!!,
                 message = newUserMessage,
             )
@@ -181,7 +200,7 @@ class TextChatViewModel @Inject constructor(
                         //todo show error
                         return@launch
                     }
-                    textChatUseCases.storeNewMessage(
+                    chatUseCases.storeNewMessage(
                         chatUUID = activeChatUUID!!,
                         message = newMessage
                     )
@@ -204,9 +223,20 @@ class TextChatViewModel @Inject constructor(
         }
     }
 
+    fun onSpeechClick() {
+        Timber.d("onSpeechClick")
+        viewModelScope.launch(ioDispatcher) {
+            streamJob?.cancel()
+            activeChatUUID?.let {
+                preferences.setActiveChatUUID(it)
+            }
+            _eventFlow.emit(TextChatEvent.NavigateToSpeech)
+        }
+    }
+
     private fun refreshChatHistories(textFilter: String? = null) {
         viewModelScope.launch(ioDispatcher) {
-            val result = textChatUseCases.getChatSummaryHistory(textFilter)
+            val result = chatUseCases.getChatSummaryHistory(textFilter)
             _uiStateNav.value = _uiStateNav.value.copy(
                 summaryList = result,
             )
