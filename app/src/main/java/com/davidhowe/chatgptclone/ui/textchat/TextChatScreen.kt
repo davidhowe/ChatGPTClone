@@ -1,5 +1,7 @@
 package com.davidhowe.chatgptclone.ui.textchat
 
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -20,15 +22,21 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import com.davidhowe.chatgptclone.R
 import com.davidhowe.chatgptclone.data.local.ChatMessageDomain
 import com.davidhowe.chatgptclone.data.local.ChatSummaryDomain
+import com.davidhowe.chatgptclone.nav.NavDirections
 import com.davidhowe.chatgptclone.util.StringFunction
 import com.davidhowe.chatgptclone.util.VoidFunction
 import kotlinx.coroutines.delay
@@ -38,10 +46,48 @@ import timber.log.Timber
 fun TextChatScreen(
     viewModel: TextChatViewModel,
     navHostController: NavHostController,
+    lifecycleOwner: LifecycleOwner = LocalLifecycleOwner.current
 ) {
     val uiStateMain by viewModel.uiStateMain.collectAsStateWithLifecycle()
     val uiStateNav by viewModel.uiStateNav.collectAsStateWithLifecycle()
     val uiStateProcessedMessage by viewModel.processedMessage.collectAsStateWithLifecycle()
+
+    val context = LocalContext.current
+
+    LaunchedEffect(Unit) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.refreshChatHistories()
+                viewModel.refreshChatMessages()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.eventFlow.collect { event ->
+            when (event) {
+                is TextChatEvent.ShowToast -> {
+                    Toast.makeText(context, event.message, Toast.LENGTH_SHORT).show()
+                }
+
+                TextChatEvent.NavigateBack -> {
+                    navHostController.navigateUp()
+                }
+
+                TextChatEvent.NavigateToSpeech -> {
+                    Timber.d("is TextChatEvent.NavigateToSpeech")
+                    navHostController.navigate(
+                        route = NavDirections.speechChat.route,
+                        builder = {
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    )
+                }
+            }
+        }
+    }
 
     TextChatScreenContent(
         titleText = uiStateMain.title,
@@ -53,7 +99,13 @@ fun TextChatScreen(
         onNewChatClicked = viewModel::onNewChatClicked,
         onChatClicked = viewModel::onChatClicked,
         onSearchTextChanged = viewModel::onSearchTextChanged,
+        onSpeechClick = viewModel::onSpeechClick,
+        onPlayClicked = viewModel::onPlayClick
     )
+
+    BackHandler {
+        Timber.d("On back pressed TextChatScreen")
+    }
 }
 
 @Composable
@@ -67,6 +119,8 @@ fun TextChatScreenContent(
     onNewChatClicked: VoidFunction,
     onChatClicked: (ChatSummaryDomain) -> Unit,
     onSearchTextChanged: StringFunction,
+    onSpeechClick: VoidFunction,
+    onPlayClicked: StringFunction
 ) {
     val keyboardController = LocalSoftwareKeyboardController.current
     val listState = rememberLazyListState()
@@ -111,7 +165,6 @@ fun TextChatScreenContent(
                         textAlign = TextAlign.Center
                     )
                 } else {
-
                     LazyColumn(
                         modifier = Modifier
                             .weight(1f)
@@ -123,7 +176,8 @@ fun TextChatScreenContent(
                             MessageBubble(
                                 message = messages[index].content,
                                 isFromUser = messages[index].isFromUser,
-                                isProcessing = false
+                                isProcessing = false,
+                                onPlayClick = { onPlayClicked.invoke(messages[index].content) }
                             )
                         }
 
@@ -163,7 +217,9 @@ fun TextChatScreenContent(
                             keyboardController?.hide()
                         }
                     },
-                    onSpeechClick = {},
+                    onSpeechClick = {
+                        onSpeechClick.invoke()
+                    },
                 )
             }
         }

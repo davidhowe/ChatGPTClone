@@ -1,6 +1,7 @@
 package com.davidhowe.chatgptclone.domain.usecase
 
 import com.davidhowe.chatgptclone.AIPromptGenerateTitle
+import com.davidhowe.chatgptclone.AIPromptTranscribe
 import com.davidhowe.chatgptclone.data.datasource.ChatLocalDataSource
 import com.davidhowe.chatgptclone.data.datasource.MessageLocalDataSource
 import com.davidhowe.chatgptclone.data.local.ChatMessageDomain
@@ -11,13 +12,14 @@ import com.davidhowe.chatgptclone.data.room.ChatEntity
 import com.davidhowe.chatgptclone.data.room.MessageEntity
 import com.google.firebase.vertexai.Chat
 import com.google.firebase.vertexai.GenerativeModel
+import com.google.firebase.vertexai.type.GenerateContentResponse
 import com.google.firebase.vertexai.type.content
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class TextChatUseCases @Inject constructor(
+class ChatUseCases @Inject constructor(
     // TODO: Refactor this into individual use cases as app expands
     private val generativeModel: GenerativeModel,
     private val chatLocalDataSource: ChatLocalDataSource,
@@ -31,6 +33,23 @@ class TextChatUseCases @Inject constructor(
         } catch (e: Exception) {
             Timber.e("Error retrieving messages for chat $chatUUID: ${e.message}")
             emptyList()
+        }
+    }
+
+    suspend fun sendAudioMessage(
+        chat: Chat,
+        audioData: ByteArray,
+    ): GenerateContentResponse? {
+        return try {
+            val inputContent = content {
+                inlineData(audioData, "audio/mp4")
+            }
+            val response = chat.sendMessage(inputContent)
+            Timber.d("Audio message sent successfully: $response")
+            response
+        } catch (e: Exception) {
+            Timber.e("Error sending audio message: ${e.message}")
+            null
         }
     }
 
@@ -57,6 +76,7 @@ class TextChatUseCases @Inject constructor(
         try {
             val messageEntity = messageLocalDataSource.insertMessage(
                 MessageEntity(
+                    createdAt = message.createdAt,
                     chatUUID = chatUUID,
                     isFromUser = message.isFromUser,
                     content = message.content,
@@ -139,5 +159,24 @@ class TextChatUseCases @Inject constructor(
         return title
     }
 
-
+    suspend fun runAITranscribeOnAudioByteArray(
+        audioData: ByteArray,
+        timeMillis: Long
+    ): Pair<String, Long>? {
+        Timber.d("runAITranscribeOnAudioByteArray")
+        val prompt = AIPromptTranscribe
+        val inputContent = content {
+            inlineData(audioData, "audio/mp4")
+            text(prompt)
+        }
+        return try {
+            val response = generativeModel.generateContent(
+                inputContent
+            )
+            Pair(response.text?.trim() ?: "", timeMillis)
+        } catch (e: Exception) {
+            Timber.e("Error generating text: ${e.message}")
+            null
+        }
+    }
 }

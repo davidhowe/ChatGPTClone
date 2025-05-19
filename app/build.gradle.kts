@@ -7,6 +7,8 @@ plugins {
     alias(libs.plugins.google.services)
 }
 
+val gpt3_tts_api_key: String by project
+
 android {
     namespace = "com.davidhowe.chatgptclone"
     compileSdk = 35
@@ -21,13 +23,29 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    packaging {
+        resources {
+            resources.excludes.add("META-INF/DEPENDENCIES")
+            resources.excludes.add("META-INF/INDEX.LIST")
+        }
+    }
+
     buildTypes {
+        debug {
+            isMinifyEnabled = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+            buildConfigField("String", "TEXT_TO_SPEECH_API_KEY", "\"$gpt3_tts_api_key\"")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            buildConfigField("String", "TEXT_TO_SPEECH_API_KEY", "\"$gpt3_tts_api_key\"")
         }
     }
     compileOptions {
@@ -63,6 +81,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.savedstate)
     implementation(libs.androidx.lifecycle.viewModelCompose)
     implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.accompanist.permissions)
+    implementation(libs.google.cloud.texttospeech)
 
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.analytics)

@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import com.davidhowe.chatgptclone.SpeechChatState
 import kotlinx.coroutines.delay
+import timber.log.Timber
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -73,6 +74,7 @@ fun ChatVisualiser(
     LaunchedEffect(chatState) {
         while (true) {
             currentVolume = volumeProvider().coerceIn(0f, 1f)
+            // Timber.d("currentVolume: $currentVolume")
 
             if (chatState == SpeechChatState.aiResponding) {
                 samples.removeAt(0)

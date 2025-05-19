@@ -4,16 +4,22 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.davidhowe.chatgptclone.data.local.ChatMessageDomain
 import com.davidhowe.chatgptclone.data.local.ChatSummaryDomain
+import com.davidhowe.chatgptclone.data.preferences.GptClonePreferences
 import com.davidhowe.chatgptclone.di.IoDispatcher
-import com.davidhowe.chatgptclone.domain.usecase.TextChatUseCases
+import com.davidhowe.chatgptclone.domain.usecase.ChatUseCases
+import com.davidhowe.chatgptclone.domain.usecase.SpeechAudioUseCases
+import com.davidhowe.chatgptclone.util.AudioPlaybackUtil
+import com.davidhowe.chatgptclone.util.DeviceUtil
 import com.davidhowe.chatgptclone.util.ResourceUtil
 import com.google.firebase.vertexai.Chat
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -30,9 +36,19 @@ data class TextChatNavDrawerUiState(
     val summaryList: List<ChatSummaryDomain> = emptyList(),
 )
 
+sealed class TextChatEvent {
+    object NavigateToSpeech : TextChatEvent()
+    object NavigateBack : TextChatEvent()
+    data class ShowToast(val message: String) : TextChatEvent()
+}
+
 @HiltViewModel
 class TextChatViewModel @Inject constructor(
-    private val textChatUseCases: TextChatUseCases,
+    private val chatUseCases: ChatUseCases,
+    private val preferences: GptClonePreferences,
+    private val deviceUtil: DeviceUtil,
+    private val audioPlaybackUtil: AudioPlaybackUtil,
+    private val speechAudioUseCases: SpeechAudioUseCases,
     private val resourceUtil: ResourceUtil,
 
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher
@@ -47,6 +63,9 @@ class TextChatViewModel @Inject constructor(
         )
     )
     val uiStateNav: StateFlow<TextChatNavDrawerUiState> = _uiStateNav.asStateFlow()
+
+    private val _eventFlow = MutableSharedFlow<TextChatEvent>()
+    val eventFlow = _eventFlow.asSharedFlow()
 
     private val _processedMessage = MutableStateFlow<String>("")
     val processedMessage = _processedMessage.asStateFlow()
@@ -63,8 +82,19 @@ class TextChatViewModel @Inject constructor(
         }
     }
 
+    override fun onCleared() {
+        Timber.d("onCleared")
+        super.onCleared()
+        streamJob?.cancel()
+        audioPlaybackUtil.release()
+    }
+
     fun onNewChatClicked() {
         Timber.d("onNewChatClicked")
+        if (!deviceUtil.isConnectedInternet()) {
+            showNoInternetToastError()
+            return
+        }
         viewModelScope.launch(ioDispatcher) {
             streamJob?.cancel()
             activeChatUUID = null
@@ -77,7 +107,7 @@ class TextChatViewModel @Inject constructor(
                     isProcessing = false
                 )
             }
-            activeChat = textChatUseCases.startChat()
+            activeChat = chatUseCases.startChat()
             if (activeChat == null) {
                 // todo error message
             }
@@ -93,11 +123,11 @@ class TextChatViewModel @Inject constructor(
             updateState {
                 copy(
                     title = chat.title,
-                    messages = textChatUseCases.getMessagesForChat(chat.uuid),
+                    messages = chatUseCases.getMessagesForChat(chat.uuid),
                     isProcessing = true
                 )
             }
-            activeChat = textChatUseCases.startChat(chat.uuid)
+            activeChat = chatUseCases.startChat(chat.uuid)
             delay(500)
             if (activeChat != null) {
                 updateState {
@@ -106,7 +136,11 @@ class TextChatViewModel @Inject constructor(
                     )
                 }
             } else {
-                // todo error message
+                if (!deviceUtil.isConnectedInternet()) {
+                    showNoInternetToastError()
+                } else {
+                    showGenericToastError()
+                }
             }
         }
     }
@@ -117,6 +151,11 @@ class TextChatViewModel @Inject constructor(
 
     fun onClickSend(text: String) {
         Timber.d("onClickSend, text: $text")
+        if (!deviceUtil.isConnectedInternet()) {
+            showNoInternetToastError()
+            return
+        }
+
         streamJob = viewModelScope.launch(ioDispatcher) {
             // Simulate user send
             delay(500) // Give keyboard time to close
@@ -134,12 +173,12 @@ class TextChatViewModel @Inject constructor(
             }
 
             if (activeChatUUID == null) {
-                activeChatUUID = textChatUseCases.storeNewChat()
+                activeChatUUID = chatUseCases.storeNewChat()
                 if (activeChatUUID == null) {
                     // todo handle error storing chat
                     return@launch
                 }
-                val title = textChatUseCases.generateChatTitle(
+                val title = chatUseCases.generateChatTitle(
                     chatUUID = activeChatUUID!!,
                     firstMessage = text
                 )
@@ -149,7 +188,7 @@ class TextChatViewModel @Inject constructor(
                     )
                 }
                 refreshChatHistories()
-                activeChat = textChatUseCases.startChat()
+                activeChat = chatUseCases.startChat()
             }
 
             if (activeChat == null || activeChatUUID == null) {
@@ -157,7 +196,7 @@ class TextChatViewModel @Inject constructor(
                 return@launch
             }
 
-            textChatUseCases.storeNewMessage(
+            chatUseCases.storeNewMessage(
                 chatUUID = activeChatUUID!!,
                 message = newUserMessage,
             )
@@ -178,10 +217,10 @@ class TextChatViewModel @Inject constructor(
                         content = _processedMessage.value,
                     )
                     if (activeChatUUID == null) {
-                        //todo show error
+                        showGenericToastError()
                         return@launch
                     }
-                    textChatUseCases.storeNewMessage(
+                    chatUseCases.storeNewMessage(
                         chatUUID = activeChatUUID!!,
                         message = newMessage
                     )
@@ -204,12 +243,73 @@ class TextChatViewModel @Inject constructor(
         }
     }
 
-    private fun refreshChatHistories(textFilter: String? = null) {
+    fun onSpeechClick() {
+        Timber.d("onSpeechClick")
+        if (!deviceUtil.isConnectedInternet()) {
+            showNoInternetToastError()
+            return
+        }
         viewModelScope.launch(ioDispatcher) {
-            val result = textChatUseCases.getChatSummaryHistory(textFilter)
+            streamJob?.cancel()
+            audioPlaybackUtil.release()
+            activeChatUUID?.let {
+                preferences.setActiveChatUUID(it)
+            }
+            _eventFlow.emit(TextChatEvent.NavigateToSpeech)
+        }
+    }
+
+    fun onPlayClick(text: String) {
+        Timber.d("onPlayClicked")
+        if (!deviceUtil.isConnectedInternet()) {
+            showNoInternetToastError()
+            return
+        }
+        viewModelScope.launch(ioDispatcher) {
+            val audioByteArray = speechAudioUseCases.synthesizeSpeech(text)
+            if (audioByteArray == null || audioByteArray.isEmpty()) {
+                Timber.w("TTS synthesis failed")
+                _eventFlow.emit(TextChatEvent.ShowToast("Failed, try again"))
+                return@launch
+            } else {
+                audioPlaybackUtil.playAudio(audioByteArray)
+            }
+
+        }
+    }
+
+    fun refreshChatMessages() {
+        Timber.d("refreshChatMessages")
+        viewModelScope.launch(ioDispatcher) {
+            activeChatUUID?.let { chatUUID ->
+                val messages = chatUseCases.getMessagesForChat(chatUUID)
+                updateState {
+                    copy(
+                        messages = messages,
+                    )
+                }
+            }
+        }
+    }
+
+    fun refreshChatHistories(textFilter: String? = null) {
+        viewModelScope.launch(ioDispatcher) {
+            val result = chatUseCases.getChatSummaryHistory(textFilter)
             _uiStateNav.value = _uiStateNav.value.copy(
                 summaryList = result,
             )
+        }
+    }
+
+    fun showNoInternetToastError() {
+        viewModelScope.launch(ioDispatcher) {
+            _eventFlow.emit(TextChatEvent.ShowToast("No internet connection")) // todo add to string resources
+        }
+    }
+
+    fun showGenericToastError() {
+        viewModelScope.launch(ioDispatcher) {
+            _eventFlow.emit(TextChatEvent.ShowToast("An error occurred. Try again")) // todo add to string resources
         }
     }
 
