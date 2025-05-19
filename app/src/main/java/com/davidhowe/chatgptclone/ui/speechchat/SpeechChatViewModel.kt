@@ -6,6 +6,8 @@ import com.davidhowe.chatgptclone.SpeechChatState
 import com.davidhowe.chatgptclone.data.preferences.GptClonePreferences
 import com.davidhowe.chatgptclone.di.IoDispatcher
 import com.davidhowe.chatgptclone.domain.usecase.ChatUseCases
+import com.davidhowe.chatgptclone.util.AudioRecorderCallback
+import com.davidhowe.chatgptclone.util.AudioRecorderUtil
 import com.davidhowe.chatgptclone.util.ResourceUtil
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.PermissionStatus
@@ -45,6 +47,7 @@ class SpeechChatViewModel @Inject constructor(
     private val resourceUtil: ResourceUtil,
     private val preferences: GptClonePreferences,
     private val chatUseCases: ChatUseCases,
+    private val audioRecorderUtil: AudioRecorderUtil,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher
 ) : ViewModel() {
 
@@ -54,12 +57,13 @@ class SpeechChatViewModel @Inject constructor(
     private val _eventFlow = MutableSharedFlow<SpeechChatEvent>()
     val eventFlow = _eventFlow.asSharedFlow()
 
-    private val _aiVolumeLevel =
+    private val _voiceLevel =
         MutableStateFlow(0f) // Seperate from uiState so we dont trigger unnecessary recomposition
-    val aiVolumeLevel: StateFlow<Float> = _aiVolumeLevel
+    val voiceLevel: StateFlow<Float> = _voiceLevel
 
     private var activeChat: Chat? = null
     private var activeChatUUID: String? = null
+    private var hasAudioRecordPermission = false
 
     private var streamJob: Job? = null
 
@@ -81,15 +85,66 @@ class SpeechChatViewModel @Inject constructor(
 
             if (activeChat == null) {
                 // todo show user error
+            } else {
+                audioRecorderUtil.setCallback(object : AudioRecorderCallback {
+                    override fun onAmplitudeLevel(level: Float) {
+                        // Update yarnballspeed
+                        Timber.d("onAmplitudeLevel level: $level")
+                        _voiceLevel.value = level
+                    }
+
+                    override fun onVoiceEnded() {
+                        Timber.d("onRecording onVoiceEnded")
+                        // Auto-stop recording and trigger Gemini
+                        viewModelScope.launch {
+                            audioRecorderUtil.stopRecording()
+                            updateState {
+                                copy(
+                                    chatState = SpeechChatState.idle,
+                                )
+                            }
+                        }
+                    }
+
+                    override fun onSilenceDetected() {
+                        Timber.d("onRecording SilenceDetected")
+                        audioRecorderUtil.stopRecording()
+                        updateState {
+                            copy(
+                                chatState = SpeechChatState.idle,
+                            )
+                        }
+                        audioRecorderUtil.startRecording()
+                    }
+
+                    override fun onRecordingStarted() {
+                        Timber.d("onRecording Started")
+                        updateState {
+                            copy(
+                                chatState = SpeechChatState.aiResponding,
+                            )
+                        }
+                    }
+
+                    override fun onRecordingStopped(filePath: String) {
+                        Timber.d("onRecording Stopped: $filePath")
+                    }
+                })
             }
         }
     }
 
     fun onNoAudioRecordPermission() {
+        hasAudioRecordPermission = false
         viewModelScope.launch(ioDispatcher) {
             delay(1000)
             _eventFlow.emit(SpeechChatEvent.RequestAudioRecordPermission)
         }
+    }
+
+    fun onDetectAudioRecordPermission() {
+        hasAudioRecordPermission = true
+        audioRecorderUtil.startRecording()
     }
 
     fun onPermissionRequestResult(

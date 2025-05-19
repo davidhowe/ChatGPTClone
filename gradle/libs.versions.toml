@@ -2,6 +2,7 @@
 accompanistPermissions = "0.31.0-alpha"
 agp = "8.10.0"
 composeMarkdown = "0.5.7"
+googleCloudTexttospeech = "2.29.0"
 kotlin = "2.1.20"
 coreKtx = "1.16.0"
 junit = "4.13.2"
@@ -28,6 +29,7 @@ androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = 
 compose-markdown = { module = "com.github.jeziellago:compose-markdown", version.ref = "composeMarkdown" }
 firebase-analytics = { module = "com.google.firebase:firebase-analytics" }
 firebase-vertexai = { module = "com.google.firebase:firebase-vertexai" }
+google-cloud-texttospeech = { module = "com.google.cloud:google-cloud-texttospeech", version.ref = "googleCloudTexttospeech" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }

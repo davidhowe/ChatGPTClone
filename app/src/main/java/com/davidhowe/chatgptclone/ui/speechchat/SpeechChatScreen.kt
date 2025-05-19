@@ -92,12 +92,15 @@ fun SpeechChatScreen(
         if (audioRecordPermissionState.status != Granted && pendingPermissionName.value.isBlank()) {
             Timber.d("SpeechChatScreen LaunchedEffect: Requesting permission")
             viewModel.onNoAudioRecordPermission()
+        } else if(audioRecordPermissionState.status == Granted) {
+            Timber.d("SpeechChatScreen LaunchedEffect: Permission granted")
+            viewModel.onDetectAudioRecordPermission()
         }
     }
 
     SpeechChatScreenContent(
         chatState = uiState.chatState,
-        volumeProvider = { viewModel.aiVolumeLevel.value }
+        volumeProvider = { viewModel.voiceLevel.value }
     )
 
     BackHandler {
