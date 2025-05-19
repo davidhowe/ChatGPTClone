@@ -22,7 +22,7 @@ class SpeechAudioUseCases @Inject constructor(
     private val messageLocalDataSource: MessageLocalDataSource,
 ) {
 
-    suspend fun synthesizeSpeech(text: String): ByteArray? {
+    fun synthesizeSpeech(text: String): ByteArray? {
         val url =
             "https://texttospeech.googleapis.com/v1/text:synthesize?key=${BuildConfig.TEXT_TO_SPEECH_API_KEY}"
 
@@ -36,7 +36,7 @@ class SpeechAudioUseCases @Inject constructor(
             "name": "en-US-Wavenet-D"
           },
           "audioConfig": {
-            "audioEncoding": "MP3"
+            "audioEncoding": "LINEAR16"
           }
         }
     """.trimIndent()

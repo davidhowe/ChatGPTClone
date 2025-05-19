@@ -11,6 +11,7 @@ import com.davidhowe.chatgptclone.data.room.ChatEntity
 import com.davidhowe.chatgptclone.data.room.MessageEntity
 import com.google.firebase.vertexai.Chat
 import com.google.firebase.vertexai.GenerativeModel
+import com.google.firebase.vertexai.type.GenerateContentResponse
 import com.google.firebase.vertexai.type.content
 import timber.log.Timber
 import javax.inject.Inject
@@ -31,6 +32,23 @@ class ChatUseCases @Inject constructor(
         } catch (e: Exception) {
             Timber.e("Error retrieving messages for chat $chatUUID: ${e.message}")
             emptyList()
+        }
+    }
+
+    suspend fun sendAudioMessage(
+        chat: Chat,
+        audioData: ByteArray,
+    ): GenerateContentResponse? {
+        return try {
+            val inputContent = content {
+                inlineData(audioData, "audio/mp4")
+            }
+            val response = chat.sendMessage(inputContent)
+            Timber.d("Audio message sent successfully: $response")
+            response
+        } catch (e: Exception) {
+            Timber.e("Error sending audio message: ${e.message}")
+            null
         }
     }
 
@@ -138,6 +156,29 @@ class ChatUseCases @Inject constructor(
 
         return title
     }
+
+    /*suspend fun runAITranscribeOnAudioByteArray(
+        audioData: ByteArray,
+    ): String {
+        Timber.d("runAITranscribeOnAudioByteArray")
+        return try {
+            val prompt = getTranscriptionPrompt(setting)
+            val inputContent = content {
+                inlineData(audioData, "audio/mp4")
+                text(prompt)
+            }
+            val modelName = remoteConfig.getString("AIModelTranscribe")
+            val response = getGenerativeModel(modelName).generateContent(inputContent)
+            RequestResult.success(data = response)
+        } catch (e: Exception) {
+            Timber.e(e)
+            //Timber.e("Error: ${e.localizedMessage}")
+            RequestResult.error(
+                status = RequestResult.Status.ERROR_NETWORK,
+                errorMessage = e.localizedMessage
+            )
+        }
+    }*/
 
 
 }

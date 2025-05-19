@@ -74,7 +74,7 @@ fun ChatVisualiser(
     LaunchedEffect(chatState) {
         while (true) {
             currentVolume = volumeProvider().coerceIn(0f, 1f)
-            Timber.d("currentVolume: $currentVolume")
+            // Timber.d("currentVolume: $currentVolume")
 
             if (chatState == SpeechChatState.aiResponding) {
                 samples.removeAt(0)

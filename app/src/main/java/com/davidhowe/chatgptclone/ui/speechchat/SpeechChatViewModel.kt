@@ -6,6 +6,9 @@ import com.davidhowe.chatgptclone.SpeechChatState
 import com.davidhowe.chatgptclone.data.preferences.GptClonePreferences
 import com.davidhowe.chatgptclone.di.IoDispatcher
 import com.davidhowe.chatgptclone.domain.usecase.ChatUseCases
+import com.davidhowe.chatgptclone.domain.usecase.SpeechAudioUseCases
+import com.davidhowe.chatgptclone.util.AudioPlaybackCallback
+import com.davidhowe.chatgptclone.util.AudioPlaybackUtil
 import com.davidhowe.chatgptclone.util.AudioRecorderCallback
 import com.davidhowe.chatgptclone.util.AudioRecorderUtil
 import com.davidhowe.chatgptclone.util.ResourceUtil
@@ -47,7 +50,9 @@ class SpeechChatViewModel @Inject constructor(
     private val resourceUtil: ResourceUtil,
     private val preferences: GptClonePreferences,
     private val chatUseCases: ChatUseCases,
+    private val speechAudioUseCases: SpeechAudioUseCases,
     private val audioRecorderUtil: AudioRecorderUtil,
+    private val audioPlaybackUtil: AudioPlaybackUtil,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher
 ) : ViewModel() {
 
@@ -86,50 +91,7 @@ class SpeechChatViewModel @Inject constructor(
             if (activeChat == null) {
                 // todo show user error
             } else {
-                audioRecorderUtil.setCallback(object : AudioRecorderCallback {
-                    override fun onAmplitudeLevel(level: Float) {
-                        // Update yarnballspeed
-                        Timber.d("onAmplitudeLevel level: $level")
-                        _voiceLevel.value = level
-                    }
-
-                    override fun onVoiceEnded() {
-                        Timber.d("onRecording onVoiceEnded")
-                        // Auto-stop recording and trigger Gemini
-                        viewModelScope.launch {
-                            audioRecorderUtil.stopRecording()
-                            updateState {
-                                copy(
-                                    chatState = SpeechChatState.idle,
-                                )
-                            }
-                        }
-                    }
-
-                    override fun onSilenceDetected() {
-                        Timber.d("onRecording SilenceDetected")
-                        audioRecorderUtil.stopRecording()
-                        updateState {
-                            copy(
-                                chatState = SpeechChatState.idle,
-                            )
-                        }
-                        audioRecorderUtil.startRecording()
-                    }
-
-                    override fun onRecordingStarted() {
-                        Timber.d("onRecording Started")
-                        updateState {
-                            copy(
-                                chatState = SpeechChatState.aiResponding,
-                            )
-                        }
-                    }
-
-                    override fun onRecordingStopped(filePath: String) {
-                        Timber.d("onRecording Stopped: $filePath")
-                    }
-                })
+                setupCallBacks()
             }
         }
     }
@@ -171,6 +133,110 @@ class SpeechChatViewModel @Inject constructor(
                 _eventFlow.emit(SpeechChatEvent.ShowToast("Permission Granted!"))
             }
         }
+    }
+
+    private fun setupCallBacks() {
+        audioPlaybackUtil.setCallback(
+            object : AudioPlaybackCallback {
+                override fun onAmplitudeLevel(level: Float) {
+                    // Update eq level
+                    _voiceLevel.value = level
+                }
+
+                override fun onPlaybackEnded() {
+                    Timber.d("onPlaybackEnded")
+                    updateState {
+                        copy(
+                            chatState = SpeechChatState.idle,
+                        )
+                    }
+                    audioRecorderUtil.startRecording()
+                }
+            }
+        )
+
+        audioRecorderUtil.setCallback(object : AudioRecorderCallback {
+            override fun onAmplitudeLevel(level: Float) {
+                // Update yarn level
+                _voiceLevel.value = level
+            }
+
+            override fun onVoiceEnded() {
+                Timber.d("onRecording onVoiceEnded")
+                // Auto-stop recording and trigger Gemini
+                viewModelScope.launch {
+                    audioRecorderUtil.stopRecording()
+                    updateState {
+                        copy(
+                            chatState = SpeechChatState.idle,
+                        )
+                    }
+                }
+            }
+
+            override fun onSilenceDetected() {
+                Timber.d("onRecording SilenceDetected")
+                audioRecorderUtil.stopRecording()
+                updateState {
+                    copy(
+                        chatState = SpeechChatState.idle,
+                    )
+                }
+                audioRecorderUtil.startRecording()
+            }
+
+            override fun onRecordingStarted() {
+                Timber.d("onRecording Started")
+                updateState {
+                    copy(
+                        chatState = SpeechChatState.userTalking,
+                    )
+                }
+            }
+
+            override fun onRecordingStopped(recordingByteArray: ByteArray?) {
+                Timber.d("onRecording Stopped")
+                updateState {
+                    copy(
+                        chatState = SpeechChatState.idle,
+                    )
+                }
+                if (activeChat != null && recordingByteArray != null) {
+                    viewModelScope.launch(ioDispatcher) {
+                        // todo save sent message to db (Need text form)
+                        val response = chatUseCases.sendAudioMessage(
+                            chat = activeChat!!,
+                            audioData = recordingByteArray
+                        )
+                        Timber.d("AI response = ${response?.text}")
+                        if (response?.text.isNullOrBlank()) {
+                            _eventFlow.emit(SpeechChatEvent.ShowToast("Try again"))
+                            audioRecorderUtil.startRecording()
+                        } else {
+                            val speechByteArray =
+                                speechAudioUseCases.synthesizeSpeech(response.text ?: "")
+                            if (speechByteArray == null || speechByteArray.isEmpty()) {
+                                Timber.w("Speech result failed")
+                                _eventFlow.emit(SpeechChatEvent.ShowToast("Try again"))
+                                audioRecorderUtil.startRecording()
+                            } else {
+                                Timber.d("Speech result success")
+                                updateState {
+                                    copy(
+                                        chatState = SpeechChatState.aiResponding,
+                                    )
+                                }
+                                audioPlaybackUtil.playAudio(
+                                    audioData = speechByteArray,
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    //TODO show error message
+                }
+            }
+        })
     }
 
     private inline fun updateState(update: SpeechChatUiState.() -> SpeechChatUiState) {

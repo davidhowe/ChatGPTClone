@@ -12,6 +12,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.io.File
+import java.io.FileInputStream
+import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -20,7 +22,7 @@ interface AudioRecorderCallback {
     fun onVoiceEnded()
     fun onSilenceDetected()
     fun onRecordingStarted()
-    fun onRecordingStopped(filePath: String)
+    fun onRecordingStopped(recording: ByteArray?)
 }
 
 @Singleton
@@ -57,8 +59,10 @@ class AudioRecorderUtil @Inject constructor(
             Timber.e(e)
         } finally {
             recorder = null
-            audioRecorderCallback?.onRecordingStopped(currentFile?.path.takeUnless { it.isNullOrBlank() }
-                ?: "")
+            amplitudeMonitoringJob?.cancel()
+            val byteArray =
+                getByteArrayFromFilePath(currentFile?.path.takeUnless { it.isNullOrBlank() } ?: "")
+            audioRecorderCallback?.onRecordingStopped(byteArray)
         }
 
         if (currentFile?.exists() != true) {
@@ -121,7 +125,7 @@ class AudioRecorderUtil @Inject constructor(
         amplitudeMonitoringJob = CoroutineScope(Dispatchers.Default).launch {
             var silentDuration = 0L
             val silenceThreshold = 1000
-            val silenceTimeLimit = 3000L
+            val silenceTimeLimit = 2000L
             val interval = 100L
             var wasSpeaking = false
             val maxPossibleAmplitude = 32767f
@@ -162,8 +166,19 @@ class AudioRecorderUtil @Inject constructor(
         }
     }
 
-
-
+    fun getByteArrayFromFilePath(filePath: String): ByteArray? {
+        return try {
+            val file = File(filePath)
+            val fileInputStream = FileInputStream(file)
+            val byteArray = ByteArray(file.length().toInt())
+            fileInputStream.read(byteArray)
+            fileInputStream.close()
+            byteArray
+        } catch (e: IOException) {
+            e.printStackTrace()
+            null
+        }
+    }
 }
 
 
