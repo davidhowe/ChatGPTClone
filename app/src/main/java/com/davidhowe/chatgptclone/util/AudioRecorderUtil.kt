@@ -3,6 +3,7 @@ package com.davidhowe.chatgptclone.util
 import android.content.Context
 import android.media.MediaRecorder
 import android.os.Build
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -17,6 +18,9 @@ import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * Callback interface for audio recording events.
+ */
 interface AudioRecorderCallback {
     fun onAmplitudeLevel(level: Float)
     fun onVoiceEnded()
@@ -25,84 +29,100 @@ interface AudioRecorderCallback {
     fun onRecordingStopped(recording: ByteArray?)
 }
 
+/**
+ * Utility class for recording audio using MediaRecorder, with amplitude monitoring.
+ * Outputs M4A files (AAC-encoded) and provides real-time amplitude levels.
+ */
 @Singleton
 class AudioRecorderUtil @Inject constructor(
-    private val context: Context,
+    @ApplicationContext private val context: Context
 ) {
     private var recorder: MediaRecorder? = null
     private var currentFile: File? = null
-
     private var amplitudeMonitoringJob: Job? = null
     private var audioRecorderCallback: AudioRecorderCallback? = null
+    private var isRecording = false
+    private val recorderLock = Any() // For thread-safe MediaRecorder access
 
-    fun setCallback(callback: AudioRecorderCallback) {
+    /**
+     * Sets the callback for recording events.
+     */
+    fun setCallback(callback: AudioRecorderCallback?) {
         this.audioRecorderCallback = callback
     }
 
+    /**
+     * Starts recording audio to a temporary M4A file.
+     * @throws IllegalStateException if recording fails to initialize.
+     */
     fun startRecording() {
-        Timber.d("startRecording")
-        createNewRecording()
-        recorder?.start()
-        audioRecorderCallback?.onRecordingStarted()
-        startAmplitudeMonitoring()
-    }
+        Timber.d("Starting audio recording")
+        stopRecording() // Ensure clean state
 
-    fun stopRecording() {
-        Timber.d("stopRecording")
-        amplitudeMonitoringJob?.cancel()
         try {
-            recorder?.apply {
-                stop()
-                release()
+            synchronized(recorderLock) {
+                currentFile = createTempFile()
+                recorder = initRecorder(currentFile!!.absolutePath)
+                recorder?.prepare()
+                recorder?.start()
+                isRecording = true
             }
+            audioRecorderCallback?.onRecordingStarted()
+            startAmplitudeMonitoring()
         } catch (e: Exception) {
-            Timber.e(e)
-        } finally {
-            recorder = null
-            amplitudeMonitoringJob?.cancel()
-            val byteArray =
-                getByteArrayFromFilePath(currentFile?.path.takeUnless { it.isNullOrBlank() } ?: "")
-            audioRecorderCallback?.onRecordingStopped(byteArray)
+            Timber.e(e, "Failed to start recording")
+            cleanup()
+            throw IllegalStateException("Failed to start recording: ${e.message}", e)
         }
-
-        if (currentFile?.exists() != true) {
-            Timber.e("Message audio recording not saved")
-        }
-
-        clearState()
     }
 
-    private fun createNewRecording() {
-        currentFile = File.createTempFile(
+    /**
+     * Stops recording and returns the recorded audio as a ByteArray.
+     */
+    fun stopRecording() {
+        Timber.d("Stopping audio recording")
+        amplitudeMonitoringJob?.cancel()
+        var recordingData: ByteArray? = null
+
+        synchronized(recorderLock) {
+            if (isRecording) {
+                try {
+                    recorder?.stop()
+                    recordingData = currentFile?.let { getByteArrayFromFile(it) }
+                } catch (e: Exception) {
+                    Timber.e(e, "Error stopping recorder")
+                }
+                isRecording = false
+            }
+            cleanup()
+        }
+
+        if (recordingData == null && currentFile?.exists() == true) {
+            Timber.e("Failed to retrieve recording data")
+        }
+        audioRecorderCallback?.onRecordingStopped(recordingData)
+    }
+
+    /**
+     * Creates a temporary file for recording.
+     */
+    private fun createTempFile(): File {
+        return File.createTempFile(
             "recording_message_${System.currentTimeMillis()}",
             ".m4a",
             context.filesDir
         )
-        initRecorder(currentFile!!.absolutePath)
-        try {
-            recorder?.apply {
-                prepare()
-            }
-        } catch (e: Exception) {
-            Timber.e(e)
-            // currentFile?.delete()
-            recorder?.release()
-            recorder = null
-            throw IllegalStateException("Failed to start recording: ${e.message}")
-        }
     }
 
-    private fun initRecorder(outputPath: String) {
-        recorder?.release()
-        recorder = null
-
-        recorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+    /**
+     * Initializes MediaRecorder with AAC encoding at 16 kHz.
+     */
+    private fun initRecorder(outputPath: String): MediaRecorder {
+        return (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             MediaRecorder(context)
         } else {
             MediaRecorder()
-        }
-
-        recorder?.apply {
+        }).apply {
             setAudioSource(MediaRecorder.AudioSource.MIC)
             setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
             setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
@@ -113,30 +133,37 @@ class AudioRecorderUtil @Inject constructor(
         }
     }
 
-    private fun clearState() {
-        currentFile = null
-        recorder?.release()
-        recorder = null
-    }
-
+    /**
+     * Starts monitoring amplitude with silence detection.
+     */
     private fun startAmplitudeMonitoring() {
         amplitudeMonitoringJob?.cancel()
-
         amplitudeMonitoringJob = CoroutineScope(Dispatchers.Default).launch {
             var silentDuration = 0L
             val silenceThreshold = 1000
-            val silenceTimeLimit = 2000L
+            val silenceTimeLimitAfterSpeech = 3000L // 3s after speech
+            val silenceTimeLimitNoSpeech = 60000L  // 60s if no speech
             val interval = 100L
             var wasSpeaking = false
             val maxPossibleAmplitude = 32767f
-
             var smoothedLevel = 0f
-            val alpha = 0.5f // Lower = smoother (0.1–0.3 is typical)
+            val alpha = 0.5f
 
-            while (isActive && recorder != null) {
-                val amplitude = recorder?.maxAmplitude ?: 0
+            while (isActive && isRecording) {
+                val amplitude = synchronized(recorderLock) {
+                    if (isRecording) {
+                        try {
+                            recorder?.maxAmplitude ?: 0
+                        } catch (e: IllegalStateException) {
+                            Timber.w("Recorder not in valid state for amplitude")
+                            0
+                        }
+                    } else {
+                        0
+                    }
+                }
+
                 val normalized = (amplitude / maxPossibleAmplitude).coerceIn(0f, 1f)
-
                 smoothedLevel = alpha * normalized + (1 - alpha) * smoothedLevel
 
                 withContext(Dispatchers.Main) {
@@ -145,7 +172,8 @@ class AudioRecorderUtil @Inject constructor(
 
                 if (amplitude < silenceThreshold) {
                     silentDuration += interval
-                    if (silentDuration >= silenceTimeLimit) {
+                    val currentSilenceLimit = if (wasSpeaking) silenceTimeLimitAfterSpeech else silenceTimeLimitNoSpeech
+                    if (silentDuration >= currentSilenceLimit) {
                         withContext(Dispatchers.Main) {
                             if (wasSpeaking) {
                                 audioRecorderCallback?.onVoiceEnded()
@@ -154,6 +182,7 @@ class AudioRecorderUtil @Inject constructor(
                                 audioRecorderCallback?.onSilenceDetected()
                             }
                         }
+                        stopRecording()
                         break
                     }
                 } else {
@@ -166,20 +195,45 @@ class AudioRecorderUtil @Inject constructor(
         }
     }
 
-    fun getByteArrayFromFilePath(filePath: String): ByteArray? {
+    /**
+     * Reads a file into a ByteArray.
+     */
+    private fun getByteArrayFromFile(file: File): ByteArray? {
         return try {
-            val file = File(filePath)
-            val fileInputStream = FileInputStream(file)
-            val byteArray = ByteArray(file.length().toInt())
-            fileInputStream.read(byteArray)
-            fileInputStream.close()
-            byteArray
+            FileInputStream(file).use { input ->
+                val byteArray = ByteArray(file.length().toInt())
+                input.read(byteArray)
+                byteArray
+            }
         } catch (e: IOException) {
-            e.printStackTrace()
+            Timber.e(e, "Failed to read recording file")
             null
         }
     }
+
+    /**
+     * Cleans up resources and resets state.
+     */
+    private fun cleanup() {
+        synchronized(recorderLock) {
+            try {
+                recorder?.reset()
+                recorder?.release()
+            } catch (e: Exception) {
+                Timber.e(e, "Error releasing recorder")
+            }
+            recorder = null
+            currentFile?.delete()
+            currentFile = null
+            isRecording = false
+        }
+    }
+
+    /**
+     * Releases resources when the instance is no longer needed.
+     */
+    fun release() {
+        stopRecording()
+        audioRecorderCallback = null
+    }
 }
-
-
-
