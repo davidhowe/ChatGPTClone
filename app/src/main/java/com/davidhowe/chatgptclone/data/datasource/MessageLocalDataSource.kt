@@ -33,8 +33,4 @@ class MessageLocalDataSource @Inject constructor(
     suspend fun deleteMessage(message: MessageEntity) {
         messageDao.delete(message)
     }
-
-    suspend fun deleteMessagesByChatId(chatId: Int) {
-        messageDao.deleteMessagesByChatId(chatId)
-    }
 }

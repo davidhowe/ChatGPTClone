@@ -26,8 +26,7 @@ class TextChatUseCases @Inject constructor(
             if (existingChatUUID.isNullOrBlank()) {
                 generativeModel.startChat()
             } else {
-                val messages = messageLocalDataSource.getMessagesForChat(existingChatUUID)
-                messages.sortedBy { it.createdAt }
+                val messages = messageLocalDataSource.getMessagesForChat(existingChatUUID).sortedBy { it.createdAt }
                 generativeModel.startChat(
                     history = messages.map { it.toDomain().toAIMessageContent() },
                 )

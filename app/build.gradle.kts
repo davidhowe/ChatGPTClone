@@ -56,7 +56,6 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation(libs.jakewharton.timber)
     implementation(libs.hilt.android)
-    implementation(libs.google.firebase.vertexai)
     implementation(libs.compose.animation)
     ksp(libs.hilt.compiler)
     implementation(libs.androidx.hilt.navigation.compose)

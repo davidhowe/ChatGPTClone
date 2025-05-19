@@ -18,7 +18,6 @@ androidx-lifecycle-runtime-compose = "2.9.0"
 room = "2.7.1"
 google-services = "4.4.2"
 firebase-bom = "33.13.0"
-firebaseVertexai = "16.4.0"
 androidxAnimationCompose = "1.8.1"
 
 [libraries]
@@ -51,7 +50,6 @@ androidx-room-ktx = { module = "androidx.room:room-ktx", version.ref = "room" }
 androidx-room-paging = { module = "androidx.room:room-paging", version.ref = "room" }
 jakewharton-timber = { group = "com.jakewharton.timber", name = "timber", version.ref = "timber" }
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebase-bom" }
-google-firebase-vertexai = { group = "com.google.firebase", name = "firebase-vertexai", version.ref = "firebaseVertexai" }
 compose-animation = { group = "androidx.compose.animation", name = "animation", version.ref = "androidxAnimationCompose" }
 
 [plugins]

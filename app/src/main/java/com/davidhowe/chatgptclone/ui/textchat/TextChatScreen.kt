@@ -157,7 +157,7 @@ fun TextChatScreenContent(
                     },
                     onSendClick = {
                         messageScrollToggle = !messageScrollToggle
-                        if (inputText.isNotBlank()) {
+                        if (inputText.isNotBlank() && !isProcessing) {
                             onClickSend.invoke(inputText)
                             inputText = ""
                             keyboardController?.hide()
