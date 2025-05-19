@@ -1,10 +1,10 @@
 package com.davidhowe.chatgptclone.ui.textchat
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -28,6 +28,7 @@ import com.davidhowe.chatgptclone.R
 import com.davidhowe.chatgptclone.data.local.ChatMessageDomain
 import com.davidhowe.chatgptclone.data.local.ChatSummaryDomain
 import com.davidhowe.chatgptclone.util.StringFunction
+import kotlinx.coroutines.delay
 import timber.log.Timber
 
 @Composable
@@ -37,11 +38,13 @@ fun TextChatScreen(
 ) {
     val uiStateMain by viewModel.uiStateMain.collectAsStateWithLifecycle()
     val uiStateNav by viewModel.uiStateNav.collectAsStateWithLifecycle()
+    val uiStateProcessedMessage by viewModel.processedMessage.collectAsStateWithLifecycle()
 
     TextChatScreenContent(
         titleText = uiStateMain.title,
         messages = uiStateMain.messages,
         isProcessing = uiStateMain.isProcessing,
+        processedMessage = uiStateProcessedMessage,
         navChatList = uiStateNav.summaryList,
         onClickSend = viewModel::onClickSend
     )
@@ -52,6 +55,7 @@ fun TextChatScreenContent(
     titleText: String,
     messages: List<ChatMessageDomain>,
     isProcessing: Boolean = false,
+    processedMessage: String,
     navChatList: List<ChatSummaryDomain>,
     onClickSend: StringFunction
 ) {
@@ -61,10 +65,20 @@ fun TextChatScreenContent(
     var messageScrollToggle by remember { mutableStateOf(false) }
 
     LaunchedEffect(messages.size, isProcessing, messageScrollToggle) {
+        Timber.d("Composing LaunchedEffect")
+        delay(50) // debounce to avoid scroll spam
         if (messages.isNotEmpty()) {
-            listState.animateScrollToItem(
-                index = messages.lastIndex,
-            )
+            if (isProcessing) {
+                listState.scrollToItem(
+                    index = messages.lastIndex + 1,
+                    scrollOffset = Int.MAX_VALUE
+                )
+            } else {
+                listState.animateScrollToItem(
+                    index = messages.lastIndex,
+                    scrollOffset = Int.MAX_VALUE
+                )
+            }
         }
     }
 
@@ -88,8 +102,8 @@ fun TextChatScreenContent(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
-                    .background(MaterialTheme.colorScheme.background)
-                    .imePadding() // Handle keyboard overlap
+                    .background(MaterialTheme.colorScheme.background),
+                verticalArrangement = Arrangement.Bottom,
             ) {
                 if (messages.isEmpty()) {
                     Text(
@@ -100,6 +114,7 @@ fun TextChatScreenContent(
                         textAlign = TextAlign.Center
                     )
                 } else {
+
                     LazyColumn(
                         modifier = Modifier
                             .weight(1f)
@@ -111,21 +126,30 @@ fun TextChatScreenContent(
                             MessageBubble(
                                 message = messages[index].content,
                                 isFromUser = messages[index].isFromUser,
-                                isThinking = false
+                                isProcessing = false
                             )
                         }
+
                         if (isProcessing) {
-                            item {
-                                MessageBubble(
-                                    message = "",
-                                    isFromUser = false,
-                                    isThinking = true
-                                )
+                            if (processedMessage.isEmpty()) {
+                                item(key = "shimmering-bubble") {
+                                    ShimmeringThinkingBubble()
+                                }
+                            } else {
+                                item(key = "processing-message") {
+                                    MessageBubble(
+                                        message = processedMessage,
+                                        isFromUser = false,
+                                        isProcessing = true,
+                                    )
+                                }
                             }
                         }
                     }
                 }
+
                 TextChatInputBar(
+                    modifier = Modifier,
                     inputText = inputText,
                     onTextChange = {
                         inputText = it
@@ -133,7 +157,7 @@ fun TextChatScreenContent(
                     },
                     onSendClick = {
                         messageScrollToggle = !messageScrollToggle
-                        if (inputText.isNotBlank()) {
+                        if (inputText.isNotBlank() && !isProcessing) {
                             onClickSend.invoke(inputText)
                             inputText = ""
                             keyboardController?.hide()

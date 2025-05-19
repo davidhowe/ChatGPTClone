@@ -18,8 +18,8 @@ class MessageLocalDataSource @Inject constructor(
         return messageDao.getById(id)
     }
 
-    suspend fun getMessagesForChat(chatId: Int): List<MessageEntity> {
-        return messageDao.getMessagesByChatId(chatId)
+    suspend fun getMessagesForChat(chatUUID: String): List<MessageEntity> {
+        return messageDao.getMessagesByChatId(chatUUID)
     }
 
     suspend fun insertMessage(message: MessageEntity): Long {
@@ -32,9 +32,5 @@ class MessageLocalDataSource @Inject constructor(
 
     suspend fun deleteMessage(message: MessageEntity) {
         messageDao.delete(message)
-    }
-
-    suspend fun deleteMessagesByChatId(chatId: Int) {
-        messageDao.deleteMessagesByChatId(chatId)
     }
 }

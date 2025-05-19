@@ -16,6 +16,10 @@ class ChatLocalDataSource @Inject constructor(private val chatDao: ChatDao) {
         return chatDao.getById(id)
     }
 
+    suspend fun getChatByUUID(uuid: String): ChatEntity? {
+        return chatDao.getByUUID(uuid)
+    }
+
     suspend fun insertChat(chat: ChatEntity): Long {
         return chatDao.insert(chat)
     }

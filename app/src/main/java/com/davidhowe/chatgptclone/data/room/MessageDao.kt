@@ -14,8 +14,8 @@ interface MessageDao {
     @Query("SELECT * FROM messageEntities WHERE rowId = :id LIMIT 1")
     suspend fun getById(id: Int): MessageEntity?
 
-    @Query("SELECT * FROM messageEntities WHERE chatId = :chatId")
-    suspend fun getMessagesByChatId(chatId: Int): List<MessageEntity>
+    @Query("SELECT * FROM messageEntities WHERE chatUUID = :uuid")
+    suspend fun getMessagesByChatId(uuid: String): List<MessageEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(message: MessageEntity): Long
@@ -25,7 +25,4 @@ interface MessageDao {
 
     @Delete
     suspend fun delete(message: MessageEntity)
-
-    @Query("DELETE FROM messageEntities WHERE chatId = :chatId")
-    suspend fun deleteMessagesByChatId(chatId: Int)
 }

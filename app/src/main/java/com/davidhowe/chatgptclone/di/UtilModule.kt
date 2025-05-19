@@ -1,8 +1,17 @@
 package com.davidhowe.chatgptclone.di
 
 import android.content.Context
+import com.davidhowe.chatgptclone.AIConfigModel
+import com.davidhowe.chatgptclone.AIConfigTemp
 import com.davidhowe.chatgptclone.util.DeviceUtil
 import com.davidhowe.chatgptclone.util.ResourceUtil
+import com.google.firebase.Firebase
+import com.google.firebase.vertexai.GenerativeModel
+import com.google.firebase.vertexai.type.HarmBlockThreshold
+import com.google.firebase.vertexai.type.HarmCategory
+import com.google.firebase.vertexai.type.SafetySetting
+import com.google.firebase.vertexai.type.generationConfig
+import com.google.firebase.vertexai.vertexAI
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -24,5 +33,22 @@ object UtilModule {
     @Provides
     fun provideDeviceUtil(@ApplicationContext context: Context): DeviceUtil {
         return DeviceUtil(context)
+    }
+
+    @Singleton
+    @Provides
+    fun provideGenerativeModel(): GenerativeModel {
+        return Firebase.vertexAI.generativeModel(
+            modelName = AIConfigModel,
+            generationConfig = generationConfig {
+                temperature = AIConfigTemp
+            },
+            safetySettings = listOf(
+                SafetySetting(
+                    harmCategory = HarmCategory.DANGEROUS_CONTENT,
+                    threshold = HarmBlockThreshold.ONLY_HIGH
+                )
+            )
+        )
     }
 }
