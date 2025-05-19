@@ -1,5 +1,7 @@
 package com.davidhowe.chatgptclone.data.local
 
+import com.davidhowe.chatgptclone.data.room.ChatEntity
+
 data class ChatSummaryDomain(
     val uuid: String,
     val title: String,
@@ -8,11 +10,11 @@ data class ChatSummaryDomain(
 ) {
 
     companion object {
-        fun build(chatDomain: ChatDomain): ChatSummaryDomain {
+        fun build(chatDomain: ChatEntity): ChatSummaryDomain {
             return ChatSummaryDomain(
                 uuid = chatDomain.uuid,
-                title = chatDomain.title,
-                content = chatDomain.summary,
+                title = chatDomain.title.trim(),
+                content = chatDomain.summaryContent.trim(),
                 lastModifiedAt = chatDomain.lastModifiedAt
             )
         }

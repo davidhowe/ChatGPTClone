@@ -2,7 +2,6 @@ package com.davidhowe.chatgptclone.ui.textchat
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.davidhowe.chatgptclone.SampleData.sampleDataNavListChats
 import com.davidhowe.chatgptclone.data.local.ChatMessageDomain
 import com.davidhowe.chatgptclone.data.local.ChatSummaryDomain
 import com.davidhowe.chatgptclone.di.IoDispatcher
@@ -43,7 +42,7 @@ class TextChatViewModel @Inject constructor(
 
     private val _uiStateNav = MutableStateFlow(
         TextChatNavDrawerUiState(
-            summaryList = sampleDataNavListChats
+            summaryList = emptyList()
         )
     )
     val uiStateNav: StateFlow<TextChatNavDrawerUiState> = _uiStateNav.asStateFlow()
@@ -53,11 +52,68 @@ class TextChatViewModel @Inject constructor(
 
     private var activeChat: Chat? = null
     private var activeChatUUID: String? = null
+    private var stopActiveProcesses = false
 
     init {
         viewModelScope.launch(ioDispatcher) {
             delay(500)
+            refreshChatHistories()
         }
+    }
+
+    fun onNewChatClicked() {
+        Timber.d("onNewChatClicked")
+        viewModelScope.launch(ioDispatcher) {
+            stopActiveProcesses = true
+            activeChatUUID = null
+            activeChat = null
+            _processedMessage.value = ""
+            updateState {
+                copy(
+                    title = "",
+                    messages = emptyList(),
+                    isProcessing = false
+                )
+            }
+            activeChat = textChatUseCases.startChat()
+            delay(200)
+            stopActiveProcesses = false
+            if (activeChat == null) {
+                // todo error message
+            }
+        }
+    }
+
+    fun onChatClicked(chat: ChatSummaryDomain) {
+        Timber.d("onChatClicked")
+        viewModelScope.launch(ioDispatcher) {
+            stopActiveProcesses = true
+            _processedMessage.value = ""
+            activeChatUUID = chat.uuid
+            updateState {
+                copy(
+                    title = chat.title,
+                    messages = textChatUseCases.getMessagesForChat(chat.uuid),
+                    isProcessing = true
+                )
+            }
+            activeChat = textChatUseCases.startChat(chat.uuid)
+            delay(500)
+            stopActiveProcesses = false
+            if (activeChat != null) {
+                updateState {
+                    copy(
+                        isProcessing = false
+                    )
+                }
+            } else {
+                // todo error message
+            }
+        }
+    }
+
+    fun onSearchTextChanged(text: String) {
+        refreshChatHistories(text)
     }
 
     fun onClickSend(text: String) {
@@ -66,27 +122,9 @@ class TextChatViewModel @Inject constructor(
             // Simulate user send
             delay(500) // Give keyboard time to close
 
-            if (activeChatUUID == null) {
-                activeChatUUID = textChatUseCases.storeNewChat()
-                if (activeChatUUID == null) {
-                    return@launch
-                }
-                activeChat = textChatUseCases.startChat()
-            }
-
-            if (activeChat == null) {
-                // todo handle error activating chat
-                return@launch
-            }
-
             val newUserMessage = ChatMessageDomain(
                 isFromUser = true,
                 content = text,
-            )
-
-            textChatUseCases.storeNewMessage(
-                chatUUID = activeChatUUID!!,
-                message = newUserMessage,
             )
 
             updateState {
@@ -96,42 +134,87 @@ class TextChatViewModel @Inject constructor(
                 )
             }
 
+            if (activeChatUUID == null) {
+                activeChatUUID = textChatUseCases.storeNewChat()
+                if (activeChatUUID == null) {
+                    // todo handle error storing chat
+                    return@launch
+                }
+                val title = textChatUseCases.generateChatTitle(
+                    chatUUID = activeChatUUID!!,
+                    firstMessage = text
+                )
+                updateState {
+                    copy(
+                        title = title,
+                    )
+                }
+                refreshChatHistories()
+                activeChat = textChatUseCases.startChat()
+            }
+
+            if (activeChat == null || activeChatUUID == null) {
+                // todo handle error activating chat
+                return@launch
+            }
+
+            textChatUseCases.storeNewMessage(
+                chatUUID = activeChatUUID!!,
+                message = newUserMessage,
+            )
+
             _processedMessage.value = ""
             try {
                 activeChat?.sendMessageStream(text)?.collect { chunk ->
-                    val words = (chunk.text ?: "").split(" ")
+                    var words = (chunk.text ?: "").split(" ")
                     words.forEach { word ->
+                        if (stopActiveProcesses)
+                            return@collect
                         delay(70L) // 70ms per word
                         _processedMessage.value += if (_processedMessage.value.isEmpty()) word else " $word"
                     }
                 }
             } finally {
-
-                if (_processedMessage.value.isNotBlank()) {
-                    val newMessage = ChatMessageDomain(
-                        isFromUser = false,
-                        content = _processedMessage.value,
-                    )
-                    textChatUseCases.storeNewMessage(
-                        chatUUID = activeChatUUID!!,
-                        message = newMessage
-                    )
-                    updateState {
-                        copy(
-                            messages = messages + newMessage,
-                            isProcessing = false,
+                if (!stopActiveProcesses) {
+                    if (_processedMessage.value.isNotBlank()) {
+                        val newMessage = ChatMessageDomain(
+                            isFromUser = false,
+                            content = _processedMessage.value,
                         )
-                    }
-                    _processedMessage.value = ""
-                } else {
-                    updateState {
-                        copy(
-                            messages = messages,
-                            isProcessing = false,
+                        if (activeChatUUID == null) {
+                            //todo show error
+                            return@launch
+                        }
+                        textChatUseCases.storeNewMessage(
+                            chatUUID = activeChatUUID!!,
+                            message = newMessage
                         )
+                        updateState {
+                            copy(
+                                messages = messages + newMessage,
+                                isProcessing = false,
+                            )
+                        }
+                        _processedMessage.value = ""
+                    } else {
+                        updateState {
+                            copy(
+                                messages = messages,
+                                isProcessing = false,
+                            )
+                        }
                     }
                 }
             }
+        }
+    }
+
+    private fun refreshChatHistories(textFilter: String? = null) {
+        viewModelScope.launch(ioDispatcher) {
+            val result = textChatUseCases.getChatSummaryHistory(textFilter)
+            _uiStateNav.value = _uiStateNav.value.copy(
+                summaryList = result,
+            )
         }
     }
 

@@ -28,6 +28,7 @@ import com.davidhowe.chatgptclone.R
 import com.davidhowe.chatgptclone.data.local.ChatMessageDomain
 import com.davidhowe.chatgptclone.data.local.ChatSummaryDomain
 import com.davidhowe.chatgptclone.util.StringFunction
+import com.davidhowe.chatgptclone.util.VoidFunction
 import kotlinx.coroutines.delay
 import timber.log.Timber
 
@@ -46,7 +47,10 @@ fun TextChatScreen(
         isProcessing = uiStateMain.isProcessing,
         processedMessage = uiStateProcessedMessage,
         navChatList = uiStateNav.summaryList,
-        onClickSend = viewModel::onClickSend
+        onClickSend = viewModel::onClickSend,
+        onNewChatClicked = viewModel::onNewChatClicked,
+        onChatClicked = viewModel::onChatClicked,
+        onSearchTextChanged = viewModel::onSearchTextChanged,
     )
 }
 
@@ -57,7 +61,10 @@ fun TextChatScreenContent(
     isProcessing: Boolean = false,
     processedMessage: String,
     navChatList: List<ChatSummaryDomain>,
-    onClickSend: StringFunction
+    onClickSend: StringFunction,
+    onNewChatClicked: VoidFunction,
+    onChatClicked: (ChatSummaryDomain) -> Unit,
+    onSearchTextChanged: StringFunction,
 ) {
     val keyboardController = LocalSoftwareKeyboardController.current
     val listState = rememberLazyListState()
@@ -65,11 +72,10 @@ fun TextChatScreenContent(
     var messageScrollToggle by remember { mutableStateOf(false) }
 
     LaunchedEffect(messages.size, isProcessing, messageScrollToggle) {
-        Timber.d("Composing LaunchedEffect")
         delay(50) // debounce to avoid scroll spam
         if (messages.isNotEmpty()) {
             if (isProcessing) {
-                listState.scrollToItem(
+                listState.animateScrollToItem(
                     index = messages.lastIndex + 1,
                     scrollOffset = Int.MAX_VALUE
                 )
@@ -83,18 +89,18 @@ fun TextChatScreenContent(
     }
 
     TextChatNavDrawer(
-        title = titleText,
+        title = if (titleText.length > 20) titleText.substring(0, 20) + "..." else titleText,
         onNewChatClicked = {
             Timber.d("onNewChatClicked")
-            // todo handle new chat requested
+            onNewChatClicked.invoke()
         },
         onChatClicked = {
             Timber.d("onChatClicked, id: ${it.uuid}")
-            // todo handle chat click
+            onChatClicked.invoke(it)
         },
         onSearchTextChanged = {
             Timber.d("onSearchTextChanged, text: $it")
-            // todo handle search text change
+            onSearchTextChanged.invoke(it)
         },
         chatList = navChatList,
         content = { innerPadding ->

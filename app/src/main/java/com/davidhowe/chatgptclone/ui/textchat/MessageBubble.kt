@@ -25,7 +25,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -36,10 +35,13 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.davidhowe.chatgptclone.R
+import dev.jeziellago.compose.markdowntext.MarkdownText
 
 @Composable
 fun MessageBubble(
@@ -47,9 +49,11 @@ fun MessageBubble(
     message: String,
     isFromUser: Boolean,
     isProcessing: Boolean,
-    onCopyClick: (() -> Unit)? = null,
     onPlayClick: (() -> Unit)? = null,
 ) {
+    val clipboardManager: androidx.compose.ui.platform.ClipboardManager =
+        LocalClipboardManager.current
+
     val bubbleColor =
         if (isFromUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
     val textColor =
@@ -98,10 +102,16 @@ fun MessageBubble(
                             } else Modifier
                         )
                 ) {
-                    Text(
+                    /*Text(
                         text = message,
                         color = textColor,
                         style = MaterialTheme.typography.bodyMedium
+                    )*/
+                    MarkdownText(
+                        markdown = message,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            color = textColor,
+                        )
                     )
                 }
 
@@ -111,7 +121,13 @@ fun MessageBubble(
                         modifier = Modifier.align(Alignment.End),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        IconButton(onClick = { onCopyClick?.invoke() }) {
+                        IconButton(onClick = {
+                            clipboardManager.setText(
+                                AnnotatedString(
+                                    text = message
+                                )
+                            )
+                        }) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_copy),
                                 contentDescription = "Copy",
