@@ -28,8 +28,8 @@ class ChatLocalDataSource @Inject constructor(private val chatDao: ChatDao) {
         chatDao.delete(chat)
     }
 
-    suspend fun updateChat(id: Int, title: String, summaryContent: String) {
-        val chat = getChatById(id)
+    suspend fun updateChat(uuid: String, title: String, summaryContent: String) {
+        val chat = getChatByUUID(uuid)
         chat?.let {
             it.title = title
             it.summaryContent = summaryContent

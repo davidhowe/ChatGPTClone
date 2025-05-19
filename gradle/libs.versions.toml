@@ -1,5 +1,6 @@
 [versions]
 agp = "8.10.0"
+composeMarkdown = "0.5.7"
 kotlin = "2.1.20"
 coreKtx = "1.16.0"
 junit = "4.13.2"
@@ -22,6 +23,7 @@ androidxAnimationCompose = "1.8.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+compose-markdown = { module = "com.github.jeziellago:compose-markdown", version.ref = "composeMarkdown" }
 firebase-analytics = { module = "com.google.firebase:firebase-analytics" }
 firebase-vertexai = { module = "com.google.firebase:firebase-vertexai" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }

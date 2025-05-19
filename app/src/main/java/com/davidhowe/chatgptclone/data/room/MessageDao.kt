@@ -14,7 +14,7 @@ interface MessageDao {
     @Query("SELECT * FROM messageEntities WHERE rowId = :id LIMIT 1")
     suspend fun getById(id: Int): MessageEntity?
 
-    @Query("SELECT * FROM messageEntities WHERE chatUUID = :uuid")
+    @Query("SELECT * FROM messageEntities WHERE chatUUID = :uuid ORDER BY createdAt ASC")
     suspend fun getMessagesByChatId(uuid: String): List<MessageEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)

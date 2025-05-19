@@ -86,6 +86,7 @@ fun TextChatNavDrawer(
                                 if (searchText.isNotEmpty()) { // Only show if text is not empty
                                     IconButton(onClick = {
                                         searchText = ""
+                                        onSearchTextChanged.invoke("")
                                         Timber.d("Search Text Cleared")
                                     }) { // Clear text on click
                                         Icon(
@@ -122,7 +123,7 @@ fun TextChatNavDrawer(
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(top = 8.dp)
+                                .padding(bottom = 16.dp)
                                 .animateItem()
                                 .clickable {
                                     onChatClicked.invoke(chatList[index])
@@ -132,8 +133,10 @@ fun TextChatNavDrawer(
                                 },
                             horizontalAlignment = Alignment.Start
                         ) {
+                            val titleText = chatList[index].title
+                            val finalTitle = if (titleText.length > 20) titleText.substring(0, 20) + "..." else titleText
                             Text(
-                                text = chatList[index].title,
+                                text = finalTitle,
                                 fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.titleMedium
                             )

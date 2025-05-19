@@ -35,6 +35,7 @@ import com.davidhowe.chatgptclone.R
 fun TextChatInputBar(
     modifier: Modifier,
     inputText: String,
+    isProcessing: Boolean,
     onTextChange: (String) -> Unit,
     onSendClick: () -> Unit,
     onSpeechClick: () -> Unit
@@ -76,15 +77,10 @@ fun TextChatInputBar(
                 )
             },
             keyboardOptions = KeyboardOptions.Default.copy(
-                imeAction = ImeAction.Default, // Use Next to allow multi-line
+                imeAction = ImeAction.Default,
                 keyboardType = KeyboardType.Text,
                 capitalization = KeyboardCapitalization.Sentences
             ),
-            /*keyboardActions = KeyboardActions(
-                onNext = {
-                    onSendClick.invoke()
-                }
-            ),*/
             maxLines = 10,
             shape = RoundedCornerShape(12.dp),
             colors = TextFieldDefaults.colors(
@@ -118,7 +114,7 @@ fun TextChatInputBar(
                 modifier = Modifier.size(54.dp),
                 painter = painterResource(R.drawable.ic_send_circle),
                 contentDescription = "Send",
-                tint = if (inputText.isNotBlank()) MaterialTheme.colorScheme.primary else Color.LightGray
+                tint = if (inputText.isNotBlank() && !isProcessing) MaterialTheme.colorScheme.primary else Color.LightGray
             )
         }
     }
