@@ -27,7 +27,6 @@ class TextChatUseCases @Inject constructor(
     suspend fun getMessagesForChat(chatUUID: String): List<ChatMessageDomain> {
         return try {
             val messages = messageLocalDataSource.getMessagesForChat(chatUUID)
-                .sortedBy { it.createdAt }
             messages.map { it.toDomain() }
         } catch (e: Exception) {
             Timber.e("Error retrieving messages for chat $chatUUID: ${e.message}")
@@ -41,7 +40,6 @@ class TextChatUseCases @Inject constructor(
                 generativeModel.startChat()
             } else {
                 val messages = messageLocalDataSource.getMessagesForChat(existingChatUUID)
-                    .sortedBy { it.createdAt }
                 generativeModel.startChat(
                     history = messages.map { it.toDomain().toAIMessageContent() },
                 )
@@ -86,7 +84,8 @@ class TextChatUseCases @Inject constructor(
 
     suspend fun getChatSummaryHistory(textFilter: String? = null): List<ChatSummaryDomain> {
         return try {
-            val chatHistories = chatLocalDataSource.getChatList().sortedByDescending { it.createdAt }
+            val chatHistories =
+                chatLocalDataSource.getChatList()
             var result =
                 chatHistories.filter { it.title.isNotBlank() && it.summaryContent.isNotBlank() }
                     .map { ChatSummaryDomain.build(it) }
@@ -112,11 +111,16 @@ class TextChatUseCases @Inject constructor(
             val inputContent = content {
                 text(prompt)
             }
-            val response = generativeModel.generateContent(
-                inputContent
-            )
+            try {
+                val response = generativeModel.generateContent(
+                    inputContent
+                )
 
-            response.text?.trim() ?: ""
+                response.text?.trim() ?: ""
+            } catch (e: Exception) {
+                Timber.e("Error generating chat title: ${e.message}")
+                ""
+            }
         } else {
             Timber.e("Error generating chat title: first message is blank")
             ""

@@ -10,6 +10,7 @@ import com.davidhowe.chatgptclone.util.ResourceUtil
 import com.google.firebase.vertexai.Chat
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -52,7 +53,8 @@ class TextChatViewModel @Inject constructor(
 
     private var activeChat: Chat? = null
     private var activeChatUUID: String? = null
-    private var stopActiveProcesses = false
+
+    private var streamJob: Job? = null
 
     init {
         viewModelScope.launch(ioDispatcher) {
@@ -64,7 +66,7 @@ class TextChatViewModel @Inject constructor(
     fun onNewChatClicked() {
         Timber.d("onNewChatClicked")
         viewModelScope.launch(ioDispatcher) {
-            stopActiveProcesses = true
+            streamJob?.cancel()
             activeChatUUID = null
             activeChat = null
             _processedMessage.value = ""
@@ -76,8 +78,6 @@ class TextChatViewModel @Inject constructor(
                 )
             }
             activeChat = textChatUseCases.startChat()
-            delay(200)
-            stopActiveProcesses = false
             if (activeChat == null) {
                 // todo error message
             }
@@ -87,7 +87,7 @@ class TextChatViewModel @Inject constructor(
     fun onChatClicked(chat: ChatSummaryDomain) {
         Timber.d("onChatClicked")
         viewModelScope.launch(ioDispatcher) {
-            stopActiveProcesses = true
+            streamJob?.cancel()
             _processedMessage.value = ""
             activeChatUUID = chat.uuid
             updateState {
@@ -99,7 +99,6 @@ class TextChatViewModel @Inject constructor(
             }
             activeChat = textChatUseCases.startChat(chat.uuid)
             delay(500)
-            stopActiveProcesses = false
             if (activeChat != null) {
                 updateState {
                     copy(
@@ -118,7 +117,7 @@ class TextChatViewModel @Inject constructor(
 
     fun onClickSend(text: String) {
         Timber.d("onClickSend, text: $text")
-        viewModelScope.launch(ioDispatcher) {
+        streamJob = viewModelScope.launch(ioDispatcher) {
             // Simulate user send
             delay(500) // Give keyboard time to close
 
@@ -166,43 +165,39 @@ class TextChatViewModel @Inject constructor(
             _processedMessage.value = ""
             try {
                 activeChat?.sendMessageStream(text)?.collect { chunk ->
-                    var words = (chunk.text ?: "").split(" ")
-                    words.forEach { word ->
-                        if (stopActiveProcesses)
-                            return@collect
-                        delay(70L) // 70ms per word
+                    val words = (chunk.text ?: "").split(" ")
+                    for (word in words) {
+                        delay(70L)
                         _processedMessage.value += if (_processedMessage.value.isEmpty()) word else " $word"
                     }
                 }
             } finally {
-                if (!stopActiveProcesses) {
-                    if (_processedMessage.value.isNotBlank()) {
-                        val newMessage = ChatMessageDomain(
-                            isFromUser = false,
-                            content = _processedMessage.value,
+                if (_processedMessage.value.isNotBlank()) {
+                    val newMessage = ChatMessageDomain(
+                        isFromUser = false,
+                        content = _processedMessage.value,
+                    )
+                    if (activeChatUUID == null) {
+                        //todo show error
+                        return@launch
+                    }
+                    textChatUseCases.storeNewMessage(
+                        chatUUID = activeChatUUID!!,
+                        message = newMessage
+                    )
+                    updateState {
+                        copy(
+                            messages = messages + newMessage,
+                            isProcessing = false,
                         )
-                        if (activeChatUUID == null) {
-                            //todo show error
-                            return@launch
-                        }
-                        textChatUseCases.storeNewMessage(
-                            chatUUID = activeChatUUID!!,
-                            message = newMessage
+                    }
+                    _processedMessage.value = ""
+                } else {
+                    updateState {
+                        copy(
+                            messages = messages,
+                            isProcessing = false,
                         )
-                        updateState {
-                            copy(
-                                messages = messages + newMessage,
-                                isProcessing = false,
-                            )
-                        }
-                        _processedMessage.value = ""
-                    } else {
-                        updateState {
-                            copy(
-                                messages = messages,
-                                isProcessing = false,
-                            )
-                        }
                     }
                 }
             }

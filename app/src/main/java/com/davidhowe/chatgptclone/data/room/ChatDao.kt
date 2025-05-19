@@ -8,7 +8,7 @@ import androidx.room.Query
 
 @Dao
 interface ChatDao {
-    @Query("SELECT * FROM chatEntities")
+    @Query("SELECT * FROM chatEntities ORDER BY createdAt DESC")
     suspend fun getAll(): List<ChatEntity>
 
     @Query("SELECT * FROM chatEntities WHERE rowId = :id LIMIT 1")

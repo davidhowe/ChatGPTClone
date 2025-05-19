@@ -3,8 +3,10 @@ package com.davidhowe.chatgptclone.ui.textchat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -72,20 +74,9 @@ fun TextChatScreenContent(
     var messageScrollToggle by remember { mutableStateOf(false) }
 
     LaunchedEffect(messages.size, isProcessing, messageScrollToggle) {
-        delay(50) // debounce to avoid scroll spam
-        if (messages.isNotEmpty()) {
-            if (isProcessing) {
-                listState.animateScrollToItem(
-                    index = messages.lastIndex + 1,
-                    scrollOffset = Int.MAX_VALUE
-                )
-            } else {
-                listState.animateScrollToItem(
-                    index = messages.lastIndex,
-                    scrollOffset = Int.MAX_VALUE
-                )
-            }
-        }
+        delay(150) // debounce to avoid scroll spam
+        val targetIndex = if (isProcessing) messages.lastIndex + 1 else messages.lastIndex
+        listState.animateScrollToItem(index = targetIndex)
     }
 
     TextChatNavDrawer(
@@ -150,6 +141,9 @@ fun TextChatScreenContent(
                                     )
                                 }
                             }
+                            item {
+                                Spacer(modifier = Modifier.height(360.dp)) // todo adjust to size of device
+                            }
                         }
                     }
                 }
@@ -157,9 +151,9 @@ fun TextChatScreenContent(
                 TextChatInputBar(
                     modifier = Modifier,
                     inputText = inputText,
+                    isProcessing = isProcessing,
                     onTextChange = {
                         inputText = it
-                        messageScrollToggle = !messageScrollToggle
                     },
                     onSendClick = {
                         messageScrollToggle = !messageScrollToggle

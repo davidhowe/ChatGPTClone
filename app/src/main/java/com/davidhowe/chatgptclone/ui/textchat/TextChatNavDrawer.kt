@@ -134,9 +134,9 @@ fun TextChatNavDrawer(
                             horizontalAlignment = Alignment.Start
                         ) {
                             val titleText = chatList[index].title
-                            if (titleText.length > 20) titleText.substring(0, 20) + "..." else titleText
+                            val finalTitle = if (titleText.length > 20) titleText.substring(0, 20) + "..." else titleText
                             Text(
-                                text = titleText,
+                                text = finalTitle,
                                 fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.titleMedium
                             )
