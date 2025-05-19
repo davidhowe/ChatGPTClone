@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -26,6 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
@@ -33,6 +33,7 @@ import com.davidhowe.chatgptclone.R
 
 @Composable
 fun TextChatInputBar(
+    modifier: Modifier,
     inputText: String,
     onTextChange: (String) -> Unit,
     onSendClick: () -> Unit,
@@ -46,7 +47,7 @@ fun TextChatInputBar(
     val maxHeight = lineHeight * 10 + 24.dp // ~10 lines + padding
 
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.surface)
             .padding(8.dp),
@@ -75,14 +76,15 @@ fun TextChatInputBar(
                 )
             },
             keyboardOptions = KeyboardOptions.Default.copy(
-                imeAction = ImeAction.Next, // Use Next to allow multi-line
-                keyboardType = KeyboardType.Text
+                imeAction = ImeAction.Default, // Use Next to allow multi-line
+                keyboardType = KeyboardType.Text,
+                capitalization = KeyboardCapitalization.Sentences
             ),
-            keyboardActions = KeyboardActions(
+            /*keyboardActions = KeyboardActions(
                 onNext = {
                     onSendClick.invoke()
                 }
-            ),
+            ),*/
             maxLines = 10,
             shape = RoundedCornerShape(12.dp),
             colors = TextFieldDefaults.colors(
@@ -116,7 +118,7 @@ fun TextChatInputBar(
                 modifier = Modifier.size(54.dp),
                 painter = painterResource(R.drawable.ic_send_circle),
                 contentDescription = "Send",
-                tint = if(inputText.isNotBlank()) MaterialTheme.colorScheme.primary else Color.LightGray
+                tint = if (inputText.isNotBlank()) MaterialTheme.colorScheme.primary else Color.LightGray
             )
         }
     }

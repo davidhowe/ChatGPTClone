@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
+    alias(libs.plugins.google.services)
 }
 
 android {
@@ -55,12 +56,18 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation(libs.jakewharton.timber)
     implementation(libs.hilt.android)
+    implementation(libs.google.firebase.vertexai)
+    implementation(libs.compose.animation)
     ksp(libs.hilt.compiler)
     implementation(libs.androidx.hilt.navigation.compose)
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.savedstate)
     implementation(libs.androidx.lifecycle.viewModelCompose)
     implementation(libs.androidx.lifecycle.runtime.compose)
+
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.analytics)
+    implementation(libs.firebase.vertexai)
 
     ksp(libs.androidx.room.compiler)
     implementation(libs.androidx.room.ktx)

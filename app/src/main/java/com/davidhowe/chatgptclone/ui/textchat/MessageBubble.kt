@@ -31,11 +31,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -46,7 +46,7 @@ fun MessageBubble(
     modifier: Modifier = Modifier,
     message: String,
     isFromUser: Boolean,
-    isThinking: Boolean = false,
+    isProcessing: Boolean,
     onCopyClick: (() -> Unit)? = null,
     onPlayClick: (() -> Unit)? = null,
 ) {
@@ -78,36 +78,52 @@ fun MessageBubble(
                     .padding(12.dp)
                     .widthIn(max = 280.dp)
             ) {
-                if (isThinking) {
-                    ShimmeringThinkingBubble()
-                } else {
+                Box(
+                    modifier = Modifier
+                        .then(
+                            if (isProcessing) Modifier.drawWithContent {
+                                drawContent()
+                                drawRect(
+                                    brush = Brush.verticalGradient(
+                                        colors = listOf(
+                                            Color.Transparent,
+                                            bubbleColor.copy(alpha = 0.7f),
+                                            bubbleColor
+                                        ),
+                                        startY = size.height * 0.8f,
+                                        endY = size.height
+                                    ),
+                                    size = size
+                                )
+                            } else Modifier
+                        )
+                ) {
                     Text(
                         text = message,
                         color = textColor,
                         style = MaterialTheme.typography.bodyMedium
                     )
+                }
 
-                    // Show Copy & Play buttons only for assistant messages
-                    if (!isFromUser) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier.align(Alignment.End),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            IconButton(onClick = { onCopyClick?.invoke() }) {
-                                Icon(
-                                    painter = painterResource(R.drawable.ic_copy),
-                                    contentDescription = "Copy",
-                                    tint = textColor
-                                )
-                            }
-                            IconButton(onClick = { onPlayClick?.invoke() }) {
-                                Icon(
-                                    painter = painterResource(R.drawable.ic_play_circle),
-                                    contentDescription = "Play",
-                                    tint = textColor
-                                )
-                            }
+                if (!isFromUser && !isProcessing) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.align(Alignment.End),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        IconButton(onClick = { onCopyClick?.invoke() }) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_copy),
+                                contentDescription = "Copy",
+                                tint = textColor
+                            )
+                        }
+                        IconButton(onClick = { onPlayClick?.invoke() }) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_play_circle),
+                                contentDescription = "Play",
+                                tint = textColor
+                            )
                         }
                     }
                 }
@@ -116,68 +132,52 @@ fun MessageBubble(
     }
 }
 
+
 @Composable
 fun ShimmeringThinkingBubble(
     modifier: Modifier = Modifier
 ) {
-    // Define shimmer colors with more contrast
     val shimmerColors = listOf(
         Color.Transparent,
-        MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
         Color.Transparent
     )
 
-    // Infinite transition for shimmer
     val transition = rememberInfiniteTransition(label = "shimmer")
-    val translateAnim by transition.animateFloat(
-        initialValue = -200f, // Start off-screen left
-        targetValue = 200f,   // End off-screen right
+    val shimmerOffset by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1000f,
         animationSpec = infiniteRepeatable(
-            animation = tween(
-                durationMillis = 1000,
-                easing = LinearEasing
-            ),
-            repeatMode = RepeatMode.Reverse // Smooth back-and-forth
+            animation = tween(1000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
         ),
-        label = "shimmerTranslate"
+        label = "shimmer"
     )
 
-    // Get Box size to scale gradient
-    val density = LocalDensity.current
-    val boxWidthDp = 200.dp // Approximate width; adjust or use Layout to measure
-    val boxWidthPx = with(density) { boxWidthDp.toPx() }
-
-    // Create horizontal gradient
     val brush = Brush.linearGradient(
         colors = shimmerColors,
-        start = Offset(translateAnim - boxWidthPx / 2, 0f),
-        end = Offset(translateAnim + boxWidthPx / 2, 0f)
+        start = Offset(shimmerOffset, 0f),
+        end = Offset(shimmerOffset + 200f, 0f)
     )
 
     Box(
         modifier = modifier
-            .height(24.dp) // Slightly taller for better visibility
-            .fillMaxWidth(0.6f) // Mimic chat bubble width
-            .clip(RoundedCornerShape(12.dp)) // Softer corners
+            .height(24.dp)
+            .fillMaxWidth(0.6f)
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
             .background(brush)
-            .background(
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                shape = RoundedCornerShape(12.dp)
-            ) // Base color under shimmer
-            .padding(horizontal = 12.dp, vertical = 6.dp) // Inner padding
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        contentAlignment = Alignment.CenterStart
     ) {
-        // Optional: Add animated dots for "thinking" effect
-        Row(
-            modifier = Modifier.align(Alignment.CenterStart),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             repeat(3) { index ->
                 val dotScale by transition.animateFloat(
                     initialValue = 0.5f,
                     targetValue = 1f,
                     animationSpec = infiniteRepeatable(
                         animation = tween(
-                            durationMillis = 300,
+                            300,
                             delayMillis = index * 100,
                             easing = FastOutSlowInEasing
                         ),
@@ -204,7 +204,8 @@ fun ShimmeringThinkingBubble(
 fun MessageBubbleAIPreview() {
     MessageBubble(
         message = "Hello, how can I assist you today?",
-        isFromUser = false
+        isFromUser = false,
+        isProcessing = false
     )
 }
 
@@ -213,6 +214,7 @@ fun MessageBubbleAIPreview() {
 fun MessageBubbleUserPreview() {
     MessageBubble(
         message = "Hi, I'm looking for x",
-        isFromUser = true
+        isFromUser = true,
+        isProcessing = false
     )
 }

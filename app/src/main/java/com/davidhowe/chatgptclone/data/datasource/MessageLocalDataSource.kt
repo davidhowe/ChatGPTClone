@@ -18,8 +18,8 @@ class MessageLocalDataSource @Inject constructor(
         return messageDao.getById(id)
     }
 
-    suspend fun getMessagesForChat(chatId: Int): List<MessageEntity> {
-        return messageDao.getMessagesByChatId(chatId)
+    suspend fun getMessagesForChat(chatUUID: String): List<MessageEntity> {
+        return messageDao.getMessagesByChatId(chatUUID)
     }
 
     suspend fun insertMessage(message: MessageEntity): Long {

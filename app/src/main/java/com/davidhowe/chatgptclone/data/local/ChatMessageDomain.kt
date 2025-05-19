@@ -1,14 +1,15 @@
 package com.davidhowe.chatgptclone.data.local
 
-import com.davidhowe.chatgptclone.ChatMessageStatus
 import com.davidhowe.chatgptclone.data.room.MessageEntity
+import com.google.firebase.vertexai.type.Content
+import com.google.firebase.vertexai.type.content
+import java.util.UUID
 
 data class ChatMessageDomain(
-    val uuid: String,
-    val createdAt: Long,
+    val uuid: String = UUID.randomUUID().toString(),
+    val createdAt: Long = System.currentTimeMillis(),
     val isFromUser: Boolean,
-    val status: ChatMessageStatus? = null,
-    val content: String,
+    var content: String,
 )
 
 fun MessageEntity.toDomain(): ChatMessageDomain {
@@ -18,4 +19,8 @@ fun MessageEntity.toDomain(): ChatMessageDomain {
         isFromUser = isFromUser,
         content = content,
     )
+}
+
+fun ChatMessageDomain.toAIMessageContent(): Content {
+    return content(role = if (isFromUser) "user" else "model") { text(content) }
 }
