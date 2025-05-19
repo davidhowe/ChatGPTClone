@@ -3,6 +3,8 @@ package com.davidhowe.chatgptclone.ui.speechchat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.davidhowe.chatgptclone.SpeechChatState
+import com.davidhowe.chatgptclone.data.datasource.ChatLocalDataSource
+import com.davidhowe.chatgptclone.data.local.ChatMessageDomain
 import com.davidhowe.chatgptclone.data.preferences.GptClonePreferences
 import com.davidhowe.chatgptclone.di.IoDispatcher
 import com.davidhowe.chatgptclone.domain.usecase.ChatUseCases
@@ -11,6 +13,7 @@ import com.davidhowe.chatgptclone.util.AudioPlaybackCallback
 import com.davidhowe.chatgptclone.util.AudioPlaybackUtil
 import com.davidhowe.chatgptclone.util.AudioRecorderCallback
 import com.davidhowe.chatgptclone.util.AudioRecorderUtil
+import com.davidhowe.chatgptclone.util.DeviceUtil
 import com.davidhowe.chatgptclone.util.ResourceUtil
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.PermissionStatus
@@ -62,10 +65,12 @@ private enum class ProcessingStep {
 class SpeechChatViewModel @Inject constructor(
     private val resourceUtil: ResourceUtil,
     private val preferences: GptClonePreferences,
+    private val chatLocalDataSource: ChatLocalDataSource,
     private val chatUseCases: ChatUseCases,
     private val speechAudioUseCases: SpeechAudioUseCases,
     private val audioRecorderUtil: AudioRecorderUtil,
     private val audioPlaybackUtil: AudioPlaybackUtil,
+    private val deviceUtil: DeviceUtil,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher
 ) : ViewModel() {
 
@@ -109,7 +114,13 @@ class SpeechChatViewModel @Inject constructor(
      * Initializes the chat session.
      */
     private fun initializeChat() {
+
         viewModelScope.launch(ioDispatcher) {
+            if (!deviceUtil.isConnectedInternet()) {
+                showNoInternetToastError()
+                _eventFlow.emit(SpeechChatEvent.NavigateBack)
+            }
+
             activeChatUUID = preferences.getActiveChatUUID().ifBlank { null }
             activeChat = if (activeChatUUID.isNullOrBlank()) {
                 chatUseCases.startChat()
@@ -303,6 +314,7 @@ class SpeechChatViewModel @Inject constructor(
      * Processes recorded audio and generates AI response.
      */
     private suspend fun processAudio(audioData: ByteArray) {
+        val userMessageTime = System.currentTimeMillis()
         try {
             Timber.d("Processing audio, size: ${audioData.size}")
             updateState { copy(chatState = SpeechChatState.idle) }
@@ -316,6 +328,15 @@ class SpeechChatViewModel @Inject constructor(
                 updateState { copy(chatState = SpeechChatState.idle) }
                 actionChannel.send(Action.StartRecording)
             } else {
+                // Save AI message to DB
+                chatUseCases.storeNewMessage(
+                    chatUUID = activeChatUUID!!,
+                    message = ChatMessageDomain(
+                        isFromUser = false,
+                        content = response.text ?: "",
+                    )
+                )
+
                 val speechByteArray = speechAudioUseCases.synthesizeSpeech(response.text ?: "")
                 if (speechByteArray == null || speechByteArray.isEmpty()) {
                     Timber.w("TTS synthesis failed")
@@ -325,6 +346,29 @@ class SpeechChatViewModel @Inject constructor(
                 } else {
                     Timber.d("TTS synthesis success, playing response")
                     actionChannel.send(Action.PlayResponse(speechByteArray))
+
+                    // Attempt to transcribe and save the users message while ai is talking
+                    viewModelScope.launch(ioDispatcher) {
+                        val transcribeResult =
+                            chatUseCases.runAITranscribeOnAudioByteArray(audioData, userMessageTime)
+                        if (transcribeResult != null) {
+                            chatUseCases.storeNewMessage(
+                                chatUUID = activeChatUUID!!,
+                                message = ChatMessageDomain(
+                                    createdAt = transcribeResult.second,
+                                    isFromUser = true,
+                                    content = transcribeResult.first,
+                                )
+                            )
+                        }
+
+                        if (chatLocalDataSource.getChatByUUID(activeChatUUID!!)?.title.isNullOrBlank()) {
+                            chatUseCases.generateChatTitle(
+                                chatUUID = activeChatUUID!!,
+                                firstMessage = response.text ?: "New chat!"
+                            )
+                        }
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -386,6 +430,12 @@ class SpeechChatViewModel @Inject constructor(
                     _eventFlow.emit(SpeechChatEvent.RequestAudioRecordPermission)
                 }
             }
+        }
+    }
+
+    fun showNoInternetToastError() {
+        viewModelScope.launch(ioDispatcher) {
+            _eventFlow.emit(SpeechChatEvent.ShowToast("No internet connection")) // todo add to string resources
         }
     }
 

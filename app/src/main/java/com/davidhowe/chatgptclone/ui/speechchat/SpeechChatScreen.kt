@@ -92,7 +92,7 @@ fun SpeechChatScreen(
         if (audioRecordPermissionState.status != Granted && pendingPermissionName.value.isBlank()) {
             Timber.d("SpeechChatScreen LaunchedEffect: Requesting permission")
             viewModel.onNoAudioRecordPermission()
-        } else if(audioRecordPermissionState.status == Granted) {
+        } else if (audioRecordPermissionState.status == Granted) {
             Timber.d("SpeechChatScreen LaunchedEffect: Permission granted")
             viewModel.onDetectAudioRecordPermission()
         }

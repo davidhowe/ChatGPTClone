@@ -1,6 +1,7 @@
 package com.davidhowe.chatgptclone.domain.usecase
 
 import com.davidhowe.chatgptclone.AIPromptGenerateTitle
+import com.davidhowe.chatgptclone.AIPromptTranscribe
 import com.davidhowe.chatgptclone.data.datasource.ChatLocalDataSource
 import com.davidhowe.chatgptclone.data.datasource.MessageLocalDataSource
 import com.davidhowe.chatgptclone.data.local.ChatMessageDomain
@@ -75,6 +76,7 @@ class ChatUseCases @Inject constructor(
         try {
             val messageEntity = messageLocalDataSource.insertMessage(
                 MessageEntity(
+                    createdAt = message.createdAt,
                     chatUUID = chatUUID,
                     isFromUser = message.isFromUser,
                     content = message.content,
@@ -157,28 +159,24 @@ class ChatUseCases @Inject constructor(
         return title
     }
 
-    /*suspend fun runAITranscribeOnAudioByteArray(
+    suspend fun runAITranscribeOnAudioByteArray(
         audioData: ByteArray,
-    ): String {
+        timeMillis: Long
+    ): Pair<String, Long>? {
         Timber.d("runAITranscribeOnAudioByteArray")
-        return try {
-            val prompt = getTranscriptionPrompt(setting)
-            val inputContent = content {
-                inlineData(audioData, "audio/mp4")
-                text(prompt)
-            }
-            val modelName = remoteConfig.getString("AIModelTranscribe")
-            val response = getGenerativeModel(modelName).generateContent(inputContent)
-            RequestResult.success(data = response)
-        } catch (e: Exception) {
-            Timber.e(e)
-            //Timber.e("Error: ${e.localizedMessage}")
-            RequestResult.error(
-                status = RequestResult.Status.ERROR_NETWORK,
-                errorMessage = e.localizedMessage
-            )
+        val prompt = AIPromptTranscribe
+        val inputContent = content {
+            inlineData(audioData, "audio/mp4")
+            text(prompt)
         }
-    }*/
-
-
+        return try {
+            val response = generativeModel.generateContent(
+                inputContent
+            )
+            Pair(response.text?.trim() ?: "", timeMillis)
+        } catch (e: Exception) {
+            Timber.e("Error generating text: ${e.message}")
+            null
+        }
+    }
 }
